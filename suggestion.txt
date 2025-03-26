@@ -1,0 +1,201 @@
+/**
+ * Offline Functionality Implementation Guide
+ * ----------------------------------------
+ * This document outlines the suggested implementation for offline test-taking functionality
+ * in the AbacuSync application.
+ */
+
+/**
+ * 1. Local Storage/IndexedDB Implementation
+ */
+interface OfflineTest {
+  testId: string;
+  answers: Record<string, string>;
+  startTime: number;
+  endTime?: number;
+  status: 'in-progress' | 'completed' | 'synced';
+}
+
+// Example implementation for storing test data locally
+const storeTestOffline = async (testData: OfflineTest) => {
+  // Use IndexedDB for larger datasets
+  const db = await openDB('offline-tests', 1);
+  await db.put('tests', testData);
+};
+
+// Example implementation for syncing when back online
+const syncOfflineTests = async () => {
+  const db = await openDB('offline-tests', 1);
+  const unsynced = await db.getAllFromIndex('tests', 'status', 'completed');
+  
+  for (const test of unsynced) {
+    try {
+      await submitTestToServer(test);
+      await db.put('tests', { ...test, status: 'synced' });
+    } catch (error) {
+      console.error('Sync failed for test:', test.testId);
+    }
+  }
+};
+
+/**
+ * 2. Online/Offline Detection Implementation
+ * Add to test-taking component:
+ */
+const onlineDetectionExample = `
+const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+useEffect(() => {
+  const handleOnline = () => {
+    setIsOnline(true);
+    syncOfflineTests(); // Try to sync when coming back online
+  };
+  
+  const handleOffline = () => {
+    setIsOnline(false);
+  };
+
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
+
+  return () => {
+    window.removeEventListener('online', handleOnline);
+    window.removeEventListener('offline', handleOffline);
+  };
+}, []);
+`;
+
+/**
+ * 3. Periodic Auto-Save Implementation
+ * Add to test-taking component:
+ */
+const autoSaveExample = `
+useEffect(() => {
+  const autoSaveInterval = setInterval(() => {
+    const currentAnswers = {
+      testId,
+      answers: userAnswers,
+      startTime: testStartTime,
+      status: 'in-progress'
+    };
+    
+    storeTestOffline(currentAnswers);
+  }, 30000); // Auto-save every 30 seconds
+
+  return () => clearInterval(autoSaveInterval);
+}, [userAnswers]);
+`;
+
+/**
+ * 4. Modified Submit Handler Implementation
+ */
+const submitHandlerExample = `
+const handleSubmitTest = async () => {
+  const testData = {
+    testId,
+    answers: userAnswers,
+    startTime: testStartTime,
+    endTime: Date.now(),
+    status: 'completed'
+  };
+
+  try {
+    if (navigator.onLine) {
+      await submitTestToServer(testData);
+    } else {
+      await storeTestOffline(testData);
+      showNotification('Test saved offline. Will sync when internet is available.');
+    }
+  } catch (error) {
+    await storeTestOffline(testData);
+    showNotification('Error submitting test. Saved offline for later sync.');
+  }
+};
+`;
+
+/**
+ * 5. Recovery on Page Load Implementation
+ */
+const recoveryExample = `
+useEffect(() => {
+  const recoverOfflineTest = async () => {
+    const db = await openDB('offline-tests', 1);
+    const savedTest = await db.get('tests', testId);
+    
+    if (savedTest?.status === 'in-progress') {
+      setUserAnswers(savedTest.answers);
+      setTestStartTime(savedTest.startTime);
+      showNotification('Recovered your previous test progress');
+    }
+  };
+
+  recoverOfflineTest();
+}, [testId]);
+`;
+
+/**
+ * 6. Service Worker Implementation
+ * Create a new service-worker.ts file:
+ */
+const serviceWorkerExample = `
+const CACHE_NAME = 'test-cache-v1';
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll([
+        '/test-taking',
+        '/static/js/main.chunk.js',
+        // Add other essential resources
+      ]);
+    })
+  );
+});
+`;
+
+/**
+ * 7. User Feedback Components
+ */
+const userFeedbackExample = `
+const OfflineBanner = () => (
+  <div className="bg-yellow-50 p-2 text-center text-sm">
+    You're offline. Your progress will be saved and synced when you're back online.
+  </div>
+);
+
+const SyncStatus = ({ status }: { status: string }) => (
+  <div className="text-sm text-gray-600">
+    {status === 'syncing' && 'Syncing your test results...'}
+    {status === 'synced' && 'All changes synced'}
+    {status === 'offline' && 'Changes saved offline'}
+  </div>
+);
+`;
+
+/**
+ * Implementation Notes:
+ * --------------------
+ * 1. Ensure proper error handling throughout the implementation
+ * 2. Add clear user feedback about sync status
+ * 3. Consider edge cases like test time limits
+ * 4. Handle conflicts if any arise during sync
+ * 5. Implement proper cleanup of stored data
+ * 6. Test thoroughly across different network conditions
+ * 
+ * Required Dependencies:
+ * --------------------
+ * 1. idb or similar IndexedDB wrapper
+ * 2. Service worker support
+ * 3. State management solution (Redux/Context)
+ * 
+ * Next Steps:
+ * ----------
+ * 1. Set up IndexedDB database and schema
+ * 2. Implement service worker registration
+ * 3. Add offline detection and handling
+ * 4. Implement auto-save functionality
+ * 5. Add sync mechanism for offline data
+ * 6. Test across various network conditions
+ */
+
+export {};
