@@ -1,28 +1,39 @@
-import { useEffect, useState } from 'react';
-import { useDispatch } from 'react-redux';
-import { setTests } from '../store/slices/testSlice';
+import { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store/store';
 import { testApi } from '../services/api/test';
+import { Test, TestsResponse, AdminTestsResponse } from '../types';
 
 export const useTests = () => {
-  const dispatch = useDispatch();
+  const [tests, setTests] = useState<TestsResponse | AdminTestsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const userType = useSelector((state: RootState) => state.auth.user?.user_type);
 
   useEffect(() => {
     const fetchTests = async () => {
       try {
-        console.log('fetching tests');
         setIsLoading(true);
-        const data = await testApi.getAvailableTests();
-        dispatch(setTests(data));
-      } catch (error) {
-        console.error('Error fetching tests:', error);
+        setError(null);
+        
+        if (userType === 'ADMIN') {
+          const data = await testApi.getAvailableTests();
+          setTests(data);
+        } else if (userType === 'STUDENT') {
+          const data = await testApi.getStudentTests();
+          setTests(data);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch tests');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchTests();
-  }, [dispatch]);
+    if (userType) {
+      fetchTests();
+    }
+  }, [userType]);
 
-  return { isLoading };
+  return { tests, isLoading, error };
 }; 

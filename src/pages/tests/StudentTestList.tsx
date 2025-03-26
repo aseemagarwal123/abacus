@@ -1,23 +1,19 @@
-import React from 'react';
-import { useSelector } from 'react-redux';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RootState } from '../../store/store';
-import { ClipboardList, Timer, Award, Clock, Calendar, Star, BookOpen } from 'lucide-react';
+import { ClipboardList, Timer, Clock, Calendar, Star, BookOpen, History, PlayCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTests } from '../../hooks/useTests';
+import { Test, TestsResponse } from '../../types';
 
-const TestList: React.FC = () => {
+type TabType = 'upcoming' | 'in_progress' | 'past';
+
+const StudentTestList: React.FC = () => {
   const navigate = useNavigate();
-  const tests = useSelector((state: RootState) => state.test.tests);
-  const userData = useSelector((state: RootState) => state.auth.userData);
-  const { isLoading } = useTests();
+  const [activeTab, setActiveTab] = useState<TabType>('upcoming');
+  const { tests, isLoading } = useTests();
 
-  // Filter tests based on user's current level
-  // const availableTests = tests.filter(test => 
-  //   String(test.level_uuid) === userData?.current_level
-  // );
-
-  const availableTests = tests;
+  // Type guard to ensure we have student tests
+  const studentTests = tests as TestsResponse;
 
   // Fun background colors for cards
   const cardColors = [
@@ -26,6 +22,32 @@ const TestList: React.FC = () => {
     'bg-gradient-to-br from-green-100 to-teal-100 dark:from-green-900/30 dark:to-teal-900/30',
     'bg-gradient-to-br from-yellow-100 to-orange-100 dark:from-yellow-900/30 dark:to-orange-900/30'
   ];
+
+  const tabs = [
+    {
+      id: 'upcoming',
+      label: 'Upcoming Tests',
+      icon: <Clock className="w-5 h-5" />,
+      count: studentTests?.upcoming_tests?.count || 0,
+      results: studentTests?.upcoming_tests?.results || []
+    },
+    {
+      id: 'in_progress',
+      label: 'In Progress',
+      icon: <PlayCircle className="w-5 h-5" />,
+      count: studentTests?.in_progress_tests?.count || 0,
+      results: studentTests?.in_progress_tests?.results || []
+    },
+    {
+      id: 'past',
+      label: 'Past Tests',
+      icon: <History className="w-5 h-5" />,
+      count: studentTests?.past_tests?.count || 0,
+      results: studentTests?.past_tests?.results || []
+    }
+  ] as const;
+
+  const currentTests = tabs.find(tab => tab.id === activeTab)?.results || [];
 
   if (isLoading) {
     return (
@@ -47,9 +69,34 @@ const TestList: React.FC = () => {
         </h1>
       </div>
 
-      {availableTests.length > 0 ? (
+      {/* Tabs */}
+      <div className="flex flex-col sm:flex-row items-center justify-center mb-8 gap-4">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as TabType)}
+            className={`flex items-center px-6 py-3 rounded-full font-medium transition-all duration-200 ${
+              activeTab === tab.id
+                ? 'bg-primary-600 text-white shadow-lg scale-105'
+                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-gray-700'
+            }`}
+          >
+            {tab.icon}
+            <span className="ml-2">{tab.label}</span>
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-sm ${
+              activeTab === tab.id
+                ? 'bg-white/20 text-white'
+                : 'bg-primary-100 dark:bg-gray-700 text-primary-600 dark:text-primary-400'
+            }`}>
+              {tab.count}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {currentTests.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {availableTests.map((test, index) => (
+          {currentTests.map((test: Test, index: number) => (
             <div
               key={test.uuid}
               onClick={() => navigate(`/tests/${test.uuid}`)}
@@ -70,14 +117,19 @@ const TestList: React.FC = () => {
                   <Clock className="w-5 h-5 mr-2" />
                   <span className="font-medium">{test.duration_minutes} minutes</span>
                 </div>
-                
+
                 <div className="flex items-center text-purple-700 dark:text-purple-400 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
+                  <Timer className="w-5 h-5 mr-2" />
+                  <span className="font-medium">Time Left: {Math.floor(test.duration_remaining / 60)} minutes</span>
+                </div>
+                
+                <div className="flex items-center text-amber-700 dark:text-amber-400 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                   <Calendar className="w-5 h-5 mr-2" />
                   <span className="font-medium">Created: {format(new Date(test.created_at), 'MMM d, yyyy')}</span>
                 </div>
 
                 {test.due_date && (
-                  <div className="flex items-center text-amber-700 dark:text-amber-400 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
+                  <div className="flex items-center text-rose-700 dark:text-rose-400 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                     <Timer className="w-5 h-5 mr-2" />
                     <span className="font-medium">Due: {format(new Date(test.due_date), 'MMM d, yyyy')}</span>
                   </div>
@@ -96,10 +148,12 @@ const TestList: React.FC = () => {
             <ClipboardList className="w-16 h-16 text-primary-500 mx-auto" />
           </div>
           <p className="text-xl font-medium text-primary-600 dark:text-primary-400 mb-2">
-            No tests available right now!
+            No {activeTab.replace('_', ' ')} tests available right now!
           </p>
           <p className="text-sm text-primary-500 dark:text-primary-500">
-            Come back soon for new exciting challenges! 🌟
+            {activeTab === 'upcoming' ? 'Come back soon for new exciting challenges! 🌟' : 
+             activeTab === 'in_progress' ? 'Start a test to see it here! 🎯' :
+             'Complete some tests to see your history! 📚'}
           </p>
         </div>
       )}
@@ -107,4 +161,4 @@ const TestList: React.FC = () => {
   );
 };
 
-export default TestList;
+export default StudentTestList; 

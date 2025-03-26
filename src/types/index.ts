@@ -44,15 +44,31 @@ export interface Test {
   level: number;
   level_uuid: string;
   duration_minutes: number;
-  duration_remaining: number;
   sections: Section[];
+  duration_remaining: number;
   due_date: string | null;
   created_at: string;
-  completed: boolean;
+}
+
+export interface TestsResponse {
+  past_tests: {
+    count: number;
+    results: Test[];
+  };
+  in_progress_tests: {
+    count: number;
+    results: Test[];
+  };
+  upcoming_tests: {
+    count: number;
+    results: Test[];
+  };
 }
 
 export interface Level {
   uuid: string;
   name: string;
   number: number;
-} 
+}
+
+export interface AdminTestsResponse extends Array<Test> {} 

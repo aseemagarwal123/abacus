@@ -19,8 +19,8 @@ import StudentForm from './pages/students/StudentForm';
 import ActivityLogs from './pages/activity/ActivityLogs';
 import AdminTestList from './pages/tests/AdminTestList';
 import AdminTestDetails from './pages/tests/AdminTestDetails';
-import TestList from './pages/tests/TestList';
 import StudentTestDetails from './pages/tests/StudentTestDetails';
+import StudentTestList from './pages/tests/StudentTestList';
 
 function App() {
   const userType = store.getState().auth.user?.user_type;
@@ -49,7 +49,11 @@ function App() {
                 <Route path="/logs" element={<ActivityLogs />} />
                 
                 {/* Test Routes based on user type */}
-                <Route path="/tests" element={userType === 'ADMIN' ? <AdminTestList /> : <TestList />} />
+                {userType === 'ADMIN' ? (
+                  <Route path="/tests" element={<AdminTestList/>} />
+                ) : (
+                  <Route path="/tests" element={<StudentTestList />} />
+                )}
                 <Route 
                   path="/tests/:id" 
                   element={userType === 'ADMIN' ? <AdminTestDetails /> : <StudentTestDetails />} 
