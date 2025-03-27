@@ -99,39 +99,39 @@ const StudentTestList: React.FC = () => {
           {currentTests.map((test: Test, index: number) => (
             <div
               key={test.uuid}
-              onClick={() => navigate(`/tests/${test.uuid}`)}
+              onClick={() => navigate(`/tests/${activeTab === 'upcoming' ? test.uuid : test.test?.uuid}`)}
               className={`${cardColors[index % cardColors.length]} rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 p-6 border-2 border-white dark:border-gray-700 cursor-pointer relative overflow-hidden`}
             >
               <div className="absolute top-0 right-0 w-16 h-16">
                 <div className="absolute transform rotate-45 bg-primary-500 text-white text-xs font-bold py-1 right-[-35px] top-[32px] w-[170px] text-center">
-                  Level {test.level}
+                  Level {test.test?.level || test.level}
                 </div>
               </div>
               
               <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4 pr-12">
-                {test.title}
+                {test.test?.title || test.title}
               </h3>
               
               <div className="space-y-4">
                 <div className="flex items-center text-primary-700 dark:text-primary-400 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                   <Clock className="w-5 h-5 mr-2" />
-                  <span className="font-medium">{test.duration_minutes} minutes</span>
+                  <span className="font-medium">{test.test?.duration_minutes || test.duration_minutes} minutes</span>
                 </div>
 
                 <div className="flex items-center text-purple-700 dark:text-purple-400 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                   <Timer className="w-5 h-5 mr-2" />
-                  <span className="font-medium">Time Left: {Math.floor(test.duration_remaining / 60)} minutes</span>
+                  <span className="font-medium">Time Left: {Math.floor((test.remaining_duration || (test.test?.duration_remaining || test.duration_remaining || 0)) / 60)} minutes</span>
                 </div>
                 
                 <div className="flex items-center text-amber-700 dark:text-amber-400 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                   <Calendar className="w-5 h-5 mr-2" />
-                  <span className="font-medium">Created: {format(new Date(test.created_at), 'MMM d, yyyy')}</span>
+                  <span className="font-medium">Created: {format(new Date((test.test?.created_at || test.created_at) || new Date()), 'MMM d, yyyy')}</span>
                 </div>
 
-                {test.due_date && (
+                {(test.test?.due_date || test.due_date) && (
                   <div className="flex items-center text-rose-700 dark:text-rose-400 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                     <Timer className="w-5 h-5 mr-2" />
-                    <span className="font-medium">Due: {format(new Date(test.due_date), 'MMM d, yyyy')}</span>
+                    <span className="font-medium">Due: {format(new Date((test.test?.due_date || test.due_date) || new Date()), 'MMM d, yyyy')}</span>
                   </div>
                 )}
               </div>

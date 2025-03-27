@@ -48,6 +48,12 @@ export interface Test {
   duration_remaining: number;
   due_date: string | null;
   created_at: string;
+  test?: Test;
+  status?: string;
+  start_time?: string;
+  end_time?: string | null;
+  remaining_duration?: number;
+  answers?: any[];
 }
 
 export interface TestsResponse {

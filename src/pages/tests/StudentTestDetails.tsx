@@ -63,7 +63,10 @@ const StudentTestDetails: React.FC = () => {
         // Always fetch test details
         const testData = await testApi.getTestDetails(id);
         console.log('Test details received:', testData);
-        setTest(testData);
+        
+        // Handle both test structures (in_progress and upcoming)
+        const testDetails = testData.test || testData;
+        setTest(testDetails);
 
         // Only initialize student test if we don't have saved state
         if (!savedTestState) {
@@ -76,12 +79,12 @@ const StudentTestDetails: React.FC = () => {
           }
           
           setStudentTestUuid(student_test_uuid);
-          setRemainingTime(testData.duration_minutes * 60);
+          setRemainingTime(testDetails.duration_minutes * 60);
 
           // Save initial state to localStorage
           localStorage.setItem(`test_state_${id}`, JSON.stringify({
             student_test_uuid,
-            remaining_time: testData.duration_minutes * 60
+            remaining_time: testDetails.duration_minutes * 60
           }));
         }
       } catch (error) {
