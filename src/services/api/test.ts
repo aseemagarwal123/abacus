@@ -1,3 +1,4 @@
+import { String } from 'lodash';
 import { Test, TestsResponse } from '../../types';
 
 const API_URL = 'https://abacusync.onrender.com/api';
@@ -129,14 +130,14 @@ export const testApi = {
     }
   },
 
-  submitStudentTest: async (studentTestUuid: string, answers: Record<string, string>): Promise<void> => {
-    const response = await fetch(`${API_URL}/tests/student-test/${studentTestUuid}/submit/`, {
+  submitStudentTest: async (studentTestUuid: any): Promise<void> => {
+    const response = await fetch(`${API_URL}/tests/student-test/${studentTestUuid}/end_test/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Token ${localStorage.getItem('token')}`
       },
-      body: JSON.stringify({ answers })
+      // body: JSON.stringify({ answers })
     });
     if (!response.ok) {
       throw new Error('Failed to submit student test');
