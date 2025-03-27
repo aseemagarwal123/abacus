@@ -143,6 +143,23 @@ export const testApi = {
     }
   },
 
+  submitAnswer: async (studentTestUuid: string, questionUuid: string, answerText: string): Promise<void> => {
+    const response = await fetch(`${API_URL}/tests/student-test/${studentTestUuid}/submit_answer/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Token ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({
+        question: questionUuid,
+        answer_text: answerText
+      })
+    });
+    if (!response.ok) {
+      throw new Error('Failed to submit answer');
+    }
+  },
+
   uploadTest: async (formData: FormData): Promise<void> => {
     const response = await fetch(`${API_URL}/tests/upload-excel/`, {
       method: 'POST',

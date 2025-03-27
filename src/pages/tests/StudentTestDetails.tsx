@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Clock, ArrowLeft, ChevronLeft, ChevronRight, PlayCircle } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
@@ -6,6 +6,7 @@ import { RootState } from '../../store/store';
 import { setTests } from '../../store/slices/testSlice';
 import { testApi } from '../../services/api/test';
 import { Question, Test } from '../../types';
+import debounce from 'lodash/debounce';
 
 const StudentTestDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +21,7 @@ const StudentTestDetails: React.FC = () => {
   const [remainingTime, setRemainingTime] = useState<number>(0);
   const [studentTestUuid, setStudentTestUuid] = useState<string | null>(null);
   const initializedRef = useRef(false);
+  const [submittingAnswer, setSubmittingAnswer] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -249,11 +251,39 @@ const StudentTestDetails: React.FC = () => {
     }
   };
 
+  // Create a debounced submit answer function
+  const debouncedSubmitAnswer = useCallback(
+    debounce(async (studentTestUuid: string, questionUuid: string, answerText: string) => {
+      try {
+        setSubmittingAnswer(true);
+        await testApi.submitAnswer(studentTestUuid, questionUuid, answerText);
+        console.log('Answer submitted successfully');
+      } catch (error) {
+        console.error('Error submitting answer:', error);
+      } finally {
+        setSubmittingAnswer(false);
+      }
+    }, 1000), // 1 second delay
+    []
+  );
+
+  // Cleanup debounced function on unmount
+  useEffect(() => {
+    return () => {
+      debouncedSubmitAnswer.cancel();
+    };
+  }, [debouncedSubmitAnswer]);
+
   const handleAnswerChange = (questionId: string, value: string) => {
     setAnswers(prev => ({
       ...prev,
       [questionId]: value
     }));
+
+    // Only submit if test is started and we have a value
+    if (testStarted && studentTestUuid && value.trim()) {
+      debouncedSubmitAnswer(studentTestUuid, questionId, value);
+    }
   };
 
   const handleSubmit = async () => {
@@ -461,8 +491,14 @@ const StudentTestDetails: React.FC = () => {
                                   type="number"
                                   value={answers[question.uuid] || ''}
                                   onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
-                                  className="w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono bg-indigo-50 dark:bg-indigo-900/30 border-2 border-indigo-300 dark:border-indigo-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600"
+                                  className={`w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono 
+                                    bg-indigo-50 dark:bg-indigo-900/30 border-2 
+                                    ${submittingAnswer ? 'border-yellow-300 dark:border-yellow-700' : 'border-indigo-300 dark:border-indigo-700'} 
+                                    rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 
+                                    dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600
+                                    transition-colors duration-200`}
                                   placeholder="?"
+                                  disabled={!testStarted}
                                 />
                               </td>
                             ))}
