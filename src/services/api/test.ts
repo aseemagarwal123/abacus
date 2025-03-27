@@ -40,21 +40,57 @@ export const testApi = {
   },
 
   startStudentTest: async (testId: string): Promise<{ student_test_uuid: string }> => {
-    const response = await fetch(`${API_URL}/tests/student-test/`, {
+    console.log('Calling startStudentTest with testId:', testId);
+    try {
+      const response = await fetch(`${API_URL}/tests/student-test/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ test_uuid: testId })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('startStudentTest error response:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: errorData
+        });
+        throw new Error(`Failed to start student test: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('startStudentTest response:', data);
+      
+      if (!data.uuid) {
+        console.error('startStudentTest response missing uuid:', data);
+        throw new Error('Response missing uuid');
+      }
+      
+      // Return the uuid as student_test_uuid to maintain compatibility
+      return { student_test_uuid: data.uuid };
+    } catch (error) {
+      console.error('startStudentTest error:', error);
+      throw error;
+    }
+  },
+
+  startTest: async (studentTestUuid: string): Promise<void> => {
+    const response = await fetch(`${API_URL}/tests/student-test/${studentTestUuid}/start/`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Token ${localStorage.getItem('token')}`
-      },
-      body: JSON.stringify({ test_uuid: testId })
+      }
     });
     if (!response.ok) {
-      throw new Error('Failed to start student test');
+      throw new Error('Failed to start test');
     }
-    return response.json();
   },
 
   beginStudentTest: async (studentTestId: string): Promise<void> => {
+    console.log('Calling beginStudentTest with studentTestId:', studentTestId);
     const response = await fetch(`${API_URL}/tests/student-test/${studentTestId}/start/`, {
       method: 'POST',
       headers: {
@@ -64,6 +100,7 @@ export const testApi = {
     if (!response.ok) {
       throw new Error('Failed to begin student test');
     }
+    console.log('beginStudentTest response:', response.status);
   },
 
   getTestById: async (testId: string): Promise<Test> => {
@@ -89,6 +126,20 @@ export const testApi = {
     });
     if (!response.ok) {
       throw new Error('Failed to submit test');
+    }
+  },
+
+  submitStudentTest: async (studentTestUuid: string, answers: Record<string, string>): Promise<void> => {
+    const response = await fetch(`${API_URL}/tests/student-test/${studentTestUuid}/submit/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Token ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({ answers })
+    });
+    if (!response.ok) {
+      throw new Error('Failed to submit student test');
     }
   },
 

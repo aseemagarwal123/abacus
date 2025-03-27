@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Clock, ArrowLeft, ChevronLeft, ChevronRight, PlayCircle } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
@@ -17,6 +17,9 @@ const StudentTestDetails: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [questionsPerPage, setQuestionsPerPage] = useState(10);
   const [testStarted, setTestStarted] = useState(false);
+  const [remainingTime, setRemainingTime] = useState<number>(0);
+  const [studentTestUuid, setStudentTestUuid] = useState<string | null>(null);
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -36,22 +39,96 @@ const StudentTestDetails: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchTestDetails = async () => {
+    const initializeTest = async () => {
+      if (initializedRef.current || !id) return;
+      
       try {
         setLoading(true);
-        const data = await testApi.getTestDetails(id!);
-        setTest(data);
+        initializedRef.current = true;
+        
+        console.log('Initializing test with ID:', id);
+        // First get the test details
+        const testData = await testApi.getTestDetails(id);
+        console.log('Test details received:', testData);
+        setTest(testData);
+
+        // Then initialize the student test
+        console.log('Starting student test initialization...');
+        const { student_test_uuid } = await testApi.startStudentTest(id);
+        console.log('Student test initialized with UUID:', student_test_uuid);
+        
+        if (!student_test_uuid) {
+          throw new Error('Failed to get student test UUID from response');
+        }
+        
+        setStudentTestUuid(student_test_uuid);
+
+        // Check if there's a saved time in localStorage
+        const savedTime = localStorage.getItem(`test_time_${student_test_uuid}`);
+        if (savedTime) {
+          setRemainingTime(parseInt(savedTime));
+        } else {
+          setRemainingTime(testData.duration_minutes * 60);
+        }
       } catch (error) {
-        console.error('Error fetching test details:', error);
+        console.error('Error initializing test:', error);
+        initializedRef.current = false; // Reset on error so we can retry
+        // Show error to user
+        alert('Failed to initialize test. Please try again.');
       } finally {
         setLoading(false);
       }
     };
 
-    if (id) {
-      fetchTestDetails();
-    }
+    initializeTest();
   }, [id]);
+
+  useEffect(() => {
+    let timer: number;
+    if (testStarted && remainingTime > 0) {
+      timer = setInterval(() => {
+        setRemainingTime(prev => {
+          const newTime = prev - 1;
+          // Save to localStorage every 2 seconds
+          if (studentTestUuid && newTime % 2 === 0) {
+            localStorage.setItem(`test_time_${studentTestUuid}`, newTime.toString());
+          }
+          return newTime;
+        });
+      }, 1000);
+    } else if (remainingTime === 0) {
+      handleSubmit();
+    }
+    return () => clearInterval(timer);
+  }, [testStarted, remainingTime, studentTestUuid]);
+
+  const handleBeginTest = async () => {
+    try {
+      if (!studentTestUuid) {
+        console.error('No student test UUID available. Current state:', {
+          studentTestUuid,
+          test,
+          initializedRef: initializedRef.current
+        });
+        alert('Test not properly initialized. Please refresh the page and try again.');
+        return;
+      }
+
+      console.log('Starting test with UUID:', studentTestUuid);
+      await testApi.beginStudentTest(studentTestUuid);
+      console.log('Test started successfully');
+      setTestStarted(true);
+    } catch (error) {
+      console.error('Error starting test:', error);
+      alert('Failed to start test. Please try again.');
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
 
   const parseQuestionText = (text: string): number[] => {
     try {
@@ -70,8 +147,12 @@ const StudentTestDetails: React.FC = () => {
 
   const handleSubmit = async () => {
     try {
-      await testApi.submitTest(id!, answers);
-      navigate('/student-dashboard');
+      if (studentTestUuid) {
+        await testApi.submitStudentTest(studentTestUuid, answers);
+        // Clear the saved time from localStorage
+        localStorage.removeItem(`test_time_${studentTestUuid}`);
+        navigate('/student-dashboard');
+      }
     } catch (error) {
       console.error('Error submitting test:', error);
     }
@@ -167,7 +248,7 @@ const StudentTestDetails: React.FC = () => {
               <div className="flex items-center space-x-4 bg-indigo-50/80 dark:bg-indigo-900/30 px-4 py-2 rounded-full shadow-sm border border-indigo-200 dark:border-indigo-800">
                 <div className="flex items-center text-indigo-600 dark:text-indigo-400">
                   <Clock className="w-5 h-5 mr-2" />
-                  <span className="font-medium">{test.duration_minutes} minutes</span>
+                  <span className="font-medium">{testStarted ? formatTime(remainingTime) : `${test.duration_minutes} minutes`}</span>
                 </div>
                 <div className="flex items-center text-purple-600 dark:text-purple-400">
                   <span className="font-medium">Level {test.level}</span>
@@ -190,7 +271,7 @@ const StudentTestDetails: React.FC = () => {
                   Make sure you have enough time and a quiet environment.
                 </p>
                 <button
-                  onClick={() => setTestStarted(true)}
+                  onClick={handleBeginTest}
                   className="px-8 py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-medium rounded-full hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 shadow-lg"
                 >
                   Begin Test
