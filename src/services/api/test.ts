@@ -154,5 +154,17 @@ export const testApi = {
     if (!response.ok) {
       throw new Error('Failed to upload test');
     }
+  },
+
+  getRemainingDuration: async (studentTestUuid: string): Promise<{ remaining_duration: number; status: string }> => {
+    const response = await fetch(`${API_URL}/tests/student-test/${studentTestUuid}/remaining_duration/`, {
+      headers: {
+        'Authorization': `Token ${localStorage.getItem('token')}`
+      }
+    });
+    if (!response.ok) {
+      throw new Error('Failed to get remaining duration');
+    }
+    return response.json();
   }
 }; 

@@ -58,6 +58,32 @@ const StudentTestDetails: React.FC = () => {
           setStudentTestUuid(student_test_uuid);
           setRemainingTime(remaining_time);
           setTestStarted(true);
+
+          // Fetch current remaining duration from API
+          try {
+            const durationData = await testApi.getRemainingDuration(student_test_uuid);
+            console.log('Fetched remaining duration:', durationData);
+            
+            if (durationData.status === 'IN_PROGRESS') {
+              // Update localStorage and state with the API's remaining duration
+              setRemainingTime(durationData.remaining_duration);
+              localStorage.setItem(`test_state_${id}`, JSON.stringify({
+                student_test_uuid,
+                remaining_time: durationData.remaining_duration
+              }));
+            } else if (durationData.status === 'PENDING') {
+              // For PENDING status, keep the initial state but don't start the test
+              setTestStarted(false);
+            } else {
+              // For any other status (like COMPLETED, EXPIRED, etc.)
+              // Clear the local storage and redirect to dashboard
+              localStorage.removeItem(`test_state_${id}`);
+              navigate('/student-dashboard');
+              return;
+            }
+          } catch (error) {
+            console.error('Error fetching remaining duration:', error);
+          }
         }
 
         // Always fetch test details
@@ -68,9 +94,9 @@ const StudentTestDetails: React.FC = () => {
         const testDetails = testData.test || testData;
         setTest(testDetails);
 
-        // Only initialize student test if we don't have saved state
-        if (!savedTestState) {
-          console.log('No saved state found, starting student test initialization...');
+        // Only initialize student test if we don't have saved state and it's an upcoming test
+        if (!savedTestState && !testData.test) {
+          console.log('No saved state found and test is upcoming, starting student test initialization...');
           const { student_test_uuid } = await testApi.startStudentTest(id);
           console.log('Student test initialized with UUID:', student_test_uuid);
           
@@ -97,7 +123,56 @@ const StudentTestDetails: React.FC = () => {
     };
 
     initializeTest();
-  }, [id]);
+  }, [id, navigate]);
+
+  // Update the periodic check effect to handle different statuses
+  useEffect(() => {
+    let timer: number;
+    
+    const checkRemainingDuration = async () => {
+      if (testStarted && studentTestUuid) {
+        try {
+          const durationData = await testApi.getRemainingDuration(studentTestUuid);
+          if (durationData.status === 'IN_PROGRESS') {
+            setRemainingTime(durationData.remaining_duration);
+            // Update localStorage
+            if (id) {
+              localStorage.setItem(`test_state_${id}`, JSON.stringify({
+                student_test_uuid: studentTestUuid,
+                remaining_time: durationData.remaining_duration
+              }));
+            }
+          } else if (durationData.status === 'PENDING') {
+            // For PENDING status, reset to initial state
+            setTestStarted(false);
+          } else {
+            // For any other status (COMPLETED, EXPIRED, etc.)
+            // Clear local storage and redirect to dashboard
+            if (id) {
+              localStorage.removeItem(`test_state_${id}`);
+            }
+            navigate('/student-dashboard');
+            return;
+          }
+        } catch (error) {
+          console.error('Error checking remaining duration:', error);
+        }
+      }
+    };
+
+    if (testStarted && studentTestUuid) {
+      // Check remaining duration every 30 seconds
+      timer = window.setInterval(checkRemainingDuration, 30000);
+      // Initial check
+      checkRemainingDuration();
+    }
+
+    return () => {
+      if (timer) {
+        clearInterval(timer);
+      }
+    };
+  }, [testStarted, studentTestUuid, id, navigate]);
 
   useEffect(() => {
     let timer: number;
