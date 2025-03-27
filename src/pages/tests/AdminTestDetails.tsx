@@ -69,7 +69,7 @@ const AdminTestDetails: React.FC = () => {
   const handleSubmit = async () => {
     try {
       await testApi.submitTest(id!, answers);
-      navigate('/admin-dashboard');
+      navigate('/dashboard');
     } catch (error) {
       console.error('Error submitting test:', error);
     }
@@ -149,7 +149,7 @@ const AdminTestDetails: React.FC = () => {
     <div className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 min-h-screen">
       <div className="max-w-full mx-auto">
         <button
-          onClick={() => navigate('/admin-dashboard')}
+          onClick={() => navigate('/dashboard')}
           className="flex items-center text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 font-medium mb-6 transition-colors duration-200"
         >
           <ArrowLeft className="w-5 h-5 mr-2" />
