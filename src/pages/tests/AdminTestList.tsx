@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClipboardList, Clock, Calendar, Star, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTests } from '../../hooks/useTests';
 import { Test } from '../../types';
+import CreateTestModal from '../../components/test/CreateTestModal';
 
 const AdminTestList: React.FC = () => {
   const navigate = useNavigate();
-  const { tests, isLoading } = useTests();
+  const { tests, isLoading, refetch } = useTests();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -24,7 +26,7 @@ const AdminTestList: React.FC = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tests</h1>
         <button
-          onClick={() => navigate('/tests/new')}
+          onClick={() => setIsCreateModalOpen(true)}
           className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors duration-200"
         >
           <Plus className="w-5 h-5 mr-2" />
@@ -33,32 +35,42 @@ const AdminTestList: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {testList?.map((test: Test) => (
+        {testList?.map((test) => (
           <div
             key={test.uuid}
-            onClick={() => navigate(`/tests/${test.uuid}`)}
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow duration-200 cursor-pointer"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow duration-200"
           >
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              {test.title}
-            </h3>
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                {test.title}
+              </h2>
+              <div className="flex items-center bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 px-2 py-1 rounded-full text-sm">
+                Level {test.level}
+              </div>
+            </div>
             <div className="space-y-3">
               <div className="flex items-center text-gray-600 dark:text-gray-400">
-                <Clock className="w-5 h-5 mr-2" />
+                <Clock className="w-4 h-4 mr-2" />
                 <span>{test.duration_minutes} minutes</span>
               </div>
               <div className="flex items-center text-gray-600 dark:text-gray-400">
-                <Calendar className="w-5 h-5 mr-2" />
-                <span>Created: {format(new Date(test.created_at), 'MMM d, yyyy')}</span>
-              </div>
-              <div className="flex items-center text-gray-600 dark:text-gray-400">
-                <span className="font-medium">Level {test.level}</span>
+                <Calendar className="w-4 h-4 mr-2" />
+                <span>Created {format(new Date(test.created_at), 'MMM d, yyyy')}</span>
               </div>
               {test.due_date && (
-                <div className="text-amber-600 dark:text-amber-400">
-                  Due: {format(new Date(test.due_date), 'MMM d, yyyy')}
+                <div className="flex items-center text-gray-600 dark:text-gray-400">
+                  <Star className="w-4 h-4 mr-2" />
+                  <span>Due {format(new Date(test.due_date), 'MMM d, yyyy')}</span>
                 </div>
               )}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => navigate(`/tests/${test.uuid}`)}
+                className="text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+              >
+                View Details →
+              </button>
             </div>
           </div>
         ))}
@@ -77,6 +89,12 @@ const AdminTestList: React.FC = () => {
           </p>
         </div>
       )}
+
+      <CreateTestModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={refetch}
+      />
     </div>
   );
 };
