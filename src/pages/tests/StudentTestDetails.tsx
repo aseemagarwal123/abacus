@@ -47,33 +47,39 @@ const StudentTestDetails: React.FC = () => {
         initializedRef.current = true;
         
         console.log('Initializing test with ID:', id);
-        
+
         // Check if we have saved test state in localStorage first
         const savedTestState = localStorage.getItem(`test_state_${id}`);
+        
         if (savedTestState) {
           const { student_test_uuid, remaining_time } = JSON.parse(savedTestState);
           console.log('Found saved test state:', { student_test_uuid, remaining_time });
           
-          // Set the saved state
-          setStudentTestUuid(student_test_uuid);
-          setRemainingTime(remaining_time);
-          setTestStarted(true);
-
-          // Fetch current remaining duration from API
+          // First check the status of the existing test
           try {
             const durationData = await testApi.getRemainingDuration(student_test_uuid);
             console.log('Fetched remaining duration:', durationData);
             
+            // Set the student test UUID regardless of status
+            setStudentTestUuid(student_test_uuid);
+            
             if (durationData.status === 'IN_PROGRESS') {
               // Update localStorage and state with the API's remaining duration
+              setTestStarted(true);
               setRemainingTime(durationData.remaining_duration);
               localStorage.setItem(`test_state_${id}`, JSON.stringify({
                 student_test_uuid,
                 remaining_time: durationData.remaining_duration
               }));
             } else if (durationData.status === 'PENDING') {
-              // For PENDING status, keep the initial state but don't start the test
+              // For PENDING status, keep the student test UUID but reset test started state
               setTestStarted(false);
+              // Don't create a new test, just fetch test details
+              const testData = await testApi.getTestDetails(id);
+              const testDetails = testData.test || testData;
+              setTest(testDetails);
+              setRemainingTime(testDetails.duration_minutes * 60);
+              return;
             } else {
               // For any other status (like COMPLETED, EXPIRED, etc.)
               // Clear the local storage and redirect to dashboard
@@ -83,10 +89,12 @@ const StudentTestDetails: React.FC = () => {
             }
           } catch (error) {
             console.error('Error fetching remaining duration:', error);
+            // If there's an error fetching duration, clear localStorage
+            localStorage.removeItem(`test_state_${id}`);
           }
         }
-
-        // Always fetch test details
+        
+        // Only fetch test details and create new test if we don't have a valid saved state
         const testData = await testApi.getTestDetails(id);
         console.log('Test details received:', testData);
         
@@ -94,24 +102,29 @@ const StudentTestDetails: React.FC = () => {
         const testDetails = testData.test || testData;
         setTest(testDetails);
 
-        // Only initialize student test if we don't have saved state and it's an upcoming test
-        if (!savedTestState && !testData.test) {
-          console.log('No saved state found and test is upcoming, starting student test initialization...');
-          const { student_test_uuid } = await testApi.startStudentTest(id);
-          console.log('Student test initialized with UUID:', student_test_uuid);
-          
-          if (!student_test_uuid) {
-            throw new Error('Failed to get student test UUID from response');
-          }
-          
-          setStudentTestUuid(student_test_uuid);
-          setRemainingTime(testDetails.duration_minutes * 60);
+        // Only create new test if we don't have a saved state and it's an upcoming test
+        if (!savedTestState && !testData.test && !studentTestUuid) {
+          try {
+            const { student_test_uuid } = await testApi.startStudentTest(id);
+            console.log('Student test initialized with UUID:', student_test_uuid);
+            
+            if (!student_test_uuid) {
+              throw new Error('Failed to get student test UUID from response');
+            }
+            
+            setStudentTestUuid(student_test_uuid);
+            setRemainingTime(testDetails.duration_minutes * 60);
+            setTestStarted(false);
 
-          // Save initial state to localStorage
-          localStorage.setItem(`test_state_${id}`, JSON.stringify({
-            student_test_uuid,
-            remaining_time: testDetails.duration_minutes * 60
-          }));
+            // Save initial state to localStorage
+            localStorage.setItem(`test_state_${id}`, JSON.stringify({
+              student_test_uuid,
+              remaining_time: testDetails.duration_minutes * 60
+            }));
+          } catch (error) {
+            console.error('Error creating new test:', error);
+            throw error;
+          }
         }
       } catch (error) {
         console.error('Error initializing test:', error);
@@ -190,7 +203,7 @@ const StudentTestDetails: React.FC = () => {
           return newTime;
         });
       }, 1000);
-    } else if (remainingTime === 0) {
+    } else if (remainingTime === 0 && testStarted) {  // Only submit if test was actually started
       // Clear localStorage when test is complete
       if (id) {
         localStorage.removeItem(`test_state_${id}`);
@@ -245,7 +258,7 @@ const StudentTestDetails: React.FC = () => {
 
   const handleSubmit = async () => {
     try {
-      if (studentTestUuid) {
+      if (studentTestUuid && testStarted) {  // Only submit if test was actually started
         await testApi.submitStudentTest(studentTestUuid, answers);
         // Clear the saved time from localStorage
         localStorage.removeItem(`test_time_${studentTestUuid}`);
