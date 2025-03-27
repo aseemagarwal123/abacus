@@ -183,5 +183,30 @@ export const testApi = {
       throw new Error('Failed to get remaining duration');
     }
     return response.json();
+  },
+
+  getAnswers: async (studentTestUuid: string): Promise<{
+    student_test_uuid: string;
+    test_title: string;
+    status: string;
+    answers: Array<{
+      question_uuid: string;
+      question_text: string;
+      question_order: number;
+      answer_text: string;
+      is_correct: boolean | null;
+      marks_obtained: number | null;
+      submitted_at: string;
+    }>;
+  }> => {
+    const response = await fetch(`${API_URL}/tests/student-test/${studentTestUuid}/answers/`, {
+      headers: {
+        'Authorization': `Token ${localStorage.getItem('token')}`
+      }
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch answers');
+    }
+    return response.json();
   }
 }; 

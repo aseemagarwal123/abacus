@@ -22,6 +22,8 @@ const StudentTestDetails: React.FC = () => {
   const [studentTestUuid, setStudentTestUuid] = useState<string | null>(null);
   const initializedRef = useRef(false);
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
+  const [currentSection, setCurrentSection] = useState(0);
+  const inputRefs = useRef<Record<string, HTMLInputElement>>({});
 
   useEffect(() => {
     const handleResize = () => {
@@ -73,6 +75,18 @@ const StudentTestDetails: React.FC = () => {
                 student_test_uuid,
                 remaining_time: durationData.remaining_duration
               }));
+
+              // Fetch and populate saved answers
+              try {
+                const answersData = await testApi.getAnswers(student_test_uuid);
+                const savedAnswers = answersData.answers.reduce((acc, answer) => ({
+                  ...acc,
+                  [answer.question_uuid]: answer.answer_text
+                }), {});
+                setAnswers(savedAnswers);
+              } catch (error) {
+                console.error('Error fetching saved answers:', error);
+              }
             } else if (durationData.status === 'PENDING') {
               // For PENDING status, keep the student test UUID but reset test started state
               setTestStarted(false);
@@ -81,6 +95,18 @@ const StudentTestDetails: React.FC = () => {
               const testDetails = testData.test || testData;
               setTest(testDetails);
               setRemainingTime(testDetails.duration_minutes * 60);
+
+              // Also fetch any saved answers for PENDING tests
+              try {
+                const answersData = await testApi.getAnswers(student_test_uuid);
+                const savedAnswers = answersData.answers.reduce((acc, answer) => ({
+                  ...acc,
+                  [answer.question_uuid]: answer.answer_text
+                }), {});
+                setAnswers(savedAnswers);
+              } catch (error) {
+                console.error('Error fetching saved answers:', error);
+              }
               return;
             } else {
               // For any other status (like COMPLETED, EXPIRED, etc.)
@@ -251,21 +277,81 @@ const StudentTestDetails: React.FC = () => {
     }
   };
 
-  // Create a debounced submit answer function
+  // Function to find the next question UUID and its page
+  const findNextQuestionInfo = useCallback((currentQuestionUuid: string): { uuid: string | null; page: number } => {
+    if (!test) return { uuid: null, page: 1 };
+
+    let totalQuestions = 0;
+    let foundCurrent = false;
+    
+    for (const section of test.sections) {
+      for (const question of section.questions) {
+        if (foundCurrent) {
+          // Calculate the page number for the next question
+          const nextPage = Math.floor(totalQuestions / questionsPerPage) + 1;
+          return { uuid: question.uuid, page: nextPage };
+        }
+        if (question.uuid === currentQuestionUuid) {
+          foundCurrent = true;
+        }
+        totalQuestions++;
+      }
+    }
+    return { uuid: null, page: 1 };
+  }, [test, questionsPerPage]);
+
+  // Update the debounced submit answer function to handle focus movement and page changes
   const debouncedSubmitAnswer = useCallback(
     debounce(async (studentTestUuid: string, questionUuid: string, answerText: string) => {
       try {
         setSubmittingAnswer(true);
         await testApi.submitAnswer(studentTestUuid, questionUuid, answerText);
         console.log('Answer submitted successfully');
+        
+        // Find next question info and handle page change
+        const { uuid: nextQuestionUuid, page: nextPage } = findNextQuestionInfo(questionUuid);
+        if (nextQuestionUuid) {
+          // If we need to change page, do it before focusing
+          if (nextPage !== currentPage) {
+            setCurrentPage(nextPage);
+            // Add a small delay to allow the page change to complete before focusing
+            setTimeout(() => {
+              if (inputRefs.current[nextQuestionUuid]) {
+                inputRefs.current[nextQuestionUuid].focus();
+              }
+            }, 100);
+          } else if (inputRefs.current[nextQuestionUuid]) {
+            // If we're staying on the same page, focus immediately
+            inputRefs.current[nextQuestionUuid].focus();
+          }
+        }
       } catch (error) {
         console.error('Error submitting answer:', error);
       } finally {
         setSubmittingAnswer(false);
       }
-    }, 1000), // 1 second delay
-    []
+    }, 1000),
+    [findNextQuestionInfo, currentPage]
   );
+
+  // Update the keydown handler to use the new findNextQuestionInfo function
+  const handleKeyDown = useCallback((questionUuid: string, e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const { uuid: nextQuestionUuid, page: nextPage } = findNextQuestionInfo(questionUuid);
+      if (nextQuestionUuid) {
+        if (nextPage !== currentPage) {
+          setCurrentPage(nextPage);
+          setTimeout(() => {
+            if (inputRefs.current[nextQuestionUuid]) {
+              inputRefs.current[nextQuestionUuid].focus();
+            }
+          }, 100);
+        } else if (inputRefs.current[nextQuestionUuid]) {
+          inputRefs.current[nextQuestionUuid].focus();
+        }
+      }
+    }
+  }, [findNextQuestionInfo, currentPage]);
 
   // Cleanup debounced function on unmount
   useEffect(() => {
@@ -274,6 +360,65 @@ const StudentTestDetails: React.FC = () => {
     };
   }, [debouncedSubmitAnswer]);
 
+  // Function to find the page number containing a specific question
+  const findQuestionPage = useCallback((questionUuid: string) => {
+    if (!test) return 1;
+    
+    let totalQuestions = 0;
+    for (const section of test.sections) {
+      for (let i = 0; i < section.questions.length; i++) {
+        if (section.questions[i].uuid === questionUuid) {
+          return Math.floor(totalQuestions / questionsPerPage) + 1;
+        }
+        totalQuestions++;
+      }
+    }
+    return 1;
+  }, [test, questionsPerPage]);
+
+  // Function to find the most recently answered question's page
+  const findLatestAnsweredPage = useCallback((answersData: Array<{
+    question_uuid: string;
+    submitted_at: string;
+  }>) => {
+    if (answersData.length === 0) return 1;
+
+    // Sort answers by submission time (most recent first)
+    const sortedAnswers = [...answersData].sort((a, b) => 
+      new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+    );
+
+    // Find the page number of the most recently answered question
+    return findQuestionPage(sortedAnswers[0].question_uuid);
+  }, [findQuestionPage]);
+
+  // Update the answers fetch logic to set the current page
+  useEffect(() => {
+    const fetchAnswers = async () => {
+      if (!studentTestUuid) return;
+
+      try {
+        const answersData = await testApi.getAnswers(studentTestUuid);
+        const savedAnswers = answersData.answers.reduce((acc, answer) => ({
+          ...acc,
+          [answer.question_uuid]: answer.answer_text
+        }), {});
+        setAnswers(savedAnswers);
+
+        // Set the current page to show the most recently answered questions
+        const latestPage = findLatestAnsweredPage(answersData.answers);
+        setCurrentPage(latestPage);
+      } catch (error) {
+        console.error('Error fetching saved answers:', error);
+      }
+    };
+
+    if (testStarted || (studentTestUuid && test)) {
+      fetchAnswers();
+    }
+  }, [studentTestUuid, test, findLatestAnsweredPage, testStarted]);
+
+  // Update the answer change handler to navigate to the question's page
   const handleAnswerChange = (questionId: string, value: string) => {
     setAnswers(prev => ({
       ...prev,
@@ -283,6 +428,9 @@ const StudentTestDetails: React.FC = () => {
     // Only submit if test is started and we have a value
     if (testStarted && studentTestUuid && value.trim()) {
       debouncedSubmitAnswer(studentTestUuid, questionId, value);
+      // Navigate to the page containing this question
+      const questionPage = findQuestionPage(questionId);
+      setCurrentPage(questionPage);
     }
   };
 
@@ -488,9 +636,15 @@ const StudentTestDetails: React.FC = () => {
                                 className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
                               >
                                 <input
+                                  ref={el => {
+                                    if (el) {
+                                      inputRefs.current[question.uuid] = el;
+                                    }
+                                  }}
                                   type="number"
                                   value={answers[question.uuid] || ''}
                                   onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
+                                  onKeyDown={(e) => handleKeyDown(question.uuid, e)}
                                   className={`w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono 
                                     bg-indigo-50 dark:bg-indigo-900/30 border-2 
                                     ${submittingAnswer ? 'border-yellow-300 dark:border-yellow-700' : 'border-indigo-300 dark:border-indigo-700'} 
