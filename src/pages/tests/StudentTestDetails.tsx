@@ -438,7 +438,10 @@ const StudentTestDetails: React.FC = () => {
     try {
       if (studentTestUuid && testStarted) {  // Only submit if test was actually started
         await testApi.submitStudentTest(studentTestUuid);
-        // Clear the saved time from localStorage
+        // Clear all test-related items from localStorage
+        if (id) {
+          localStorage.removeItem(`test_state_${id}`);
+        }
         localStorage.removeItem(`test_time_${studentTestUuid}`);
         navigate('/student-dashboard');
       }
