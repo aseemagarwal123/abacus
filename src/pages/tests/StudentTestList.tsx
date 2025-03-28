@@ -49,6 +49,16 @@ const StudentTestList: React.FC = () => {
 
   const currentTests = tabs.find(tab => tab.id === activeTab)?.results || [];
 
+  const handleTestClick = (test: any) => {
+    if (test.status === 'COMPLETED') {
+      navigate(`/student-test/${test.uuid}/result`);
+    } else {
+      // For upcoming tests, use test.uuid, for others use test.test?.uuid
+      const testId = activeTab === 'upcoming' ? test.uuid : test.test?.uuid;
+      navigate(`/tests/${testId}`);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-6 text-center">
@@ -99,7 +109,7 @@ const StudentTestList: React.FC = () => {
           {currentTests.map((test: Test, index: number) => (
             <div
               key={test.uuid}
-              onClick={() => navigate(`/tests/${activeTab === 'upcoming' ? test.uuid : test.test?.uuid}`)}
+              onClick={() => handleTestClick(test)}
               className={`${cardColors[index % cardColors.length]} rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-300 p-6 border-2 border-white dark:border-gray-700 cursor-pointer relative overflow-hidden`}
             >
               <div className="absolute top-0 right-0 w-16 h-16">

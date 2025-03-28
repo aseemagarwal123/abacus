@@ -3,6 +3,33 @@ import { Test, TestsResponse } from '../../types';
 
 const API_URL = 'https://abacusync.onrender.com/api';
 
+interface TestResult {
+  uuid: string;
+  status: string;
+  start_time: string;
+  end_time: string;
+  total_questions: number;
+  total_attempted: number;
+  total_marks: number;
+  marks_obtained: number;
+  correct_answers: number;
+  incorrect_answers: number;
+  accuracy_percentage: number;
+  completion_time: {
+    seconds: number;
+    formatted: string;
+  };
+  answers: {
+    question_text: string;
+    question_order: number;
+    answer_text: string;
+    is_correct: boolean;
+    marks_obtained: string;
+    correct_answer_value: string;
+    question_type: 'plus' | 'multiply' | 'divide';
+  }[];
+}
+
 export const testApi = {
   getAvailableTests: async (): Promise<Test[]> => {
     const response = await fetch(`${API_URL}/tests/available-test/`, {
@@ -207,6 +234,18 @@ export const testApi = {
     });
     if (!response.ok) {
       throw new Error('Failed to fetch answers');
+    }
+    return response.json();
+  },
+
+  getStudentTestResult: async (studentTestUuid: string): Promise<TestResult> => {
+    const response = await fetch(`${API_URL}/tests/student-test/${studentTestUuid}/result/`, {
+      headers: {
+        'Authorization': `Token ${localStorage.getItem('token')}`
+      }
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch student test result');
     }
     return response.json();
   }

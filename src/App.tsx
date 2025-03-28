@@ -21,6 +21,7 @@ import AdminTestList from './pages/tests/AdminTestList';
 import AdminTestDetails from './pages/tests/AdminTestDetails';
 import StudentTestDetails from './pages/tests/StudentTestDetails';
 import StudentTestList from './pages/tests/StudentTestList';
+import StudentTestResult from './pages/tests/StudentTestResult';
 
 function App() {
   const userType = store.getState().auth.user?.user_type;
@@ -38,6 +39,7 @@ function App() {
                 <Route path="/dashboard" element={<AdminDashboard />} />
                 <Route path="/centre-dashboard" element={<CentreDashboard />} />
                 <Route path="/student-dashboard" element={<StudentDashboard />} />
+                <Route path="/student-test/:id/result" element={<StudentTestResult />} />
                 <Route path="/centres" element={<CentresList />} />
                 <Route path="/centres/:id" element={<CentreDetails />} />
                 <Route path="/centres/new" element={<CentreForm />} />
