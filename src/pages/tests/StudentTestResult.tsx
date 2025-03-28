@@ -82,8 +82,49 @@ const StudentTestResult: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-6 text-center">
-        <p className="text-gray-600 dark:text-gray-400">Loading test results...</p>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border-2 border-indigo-200 dark:border-indigo-900 p-8 max-w-sm w-full">
+          <div className="flex flex-col items-center">
+            {/* Trophy Animation */}
+            <div className="relative mb-6">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center animate-bounce">
+                <Trophy className="w-10 h-10 text-white" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-gradient-to-br from-pink-500 to-purple-500 flex items-center justify-center animate-ping">
+                <span className="text-white text-xs">✨</span>
+              </div>
+            </div>
+
+            {/* Loading Text with Rainbow Animation */}
+            <h2 className="text-2xl font-bold mb-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent animate-pulse">
+              Calculating Results...
+            </h2>
+
+            {/* Progress Bar */}
+            <div className="w-full h-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-full overflow-hidden mb-4">
+              <div className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 animate-[loading_2s_ease-in-out_infinite]"></div>
+            </div>
+
+            {/* Fun Loading Messages */}
+            <p className="text-indigo-600 dark:text-indigo-400 text-center text-sm animate-[fadeInOut_4s_ease-in-out_infinite]">
+              Preparing your amazing results! 🎉
+            </p>
+          </div>
+        </div>
+
+        <style>
+          {`
+            @keyframes loading {
+              0% { width: 0%; }
+              50% { width: 100%; }
+              100% { width: 0%; }
+            }
+            @keyframes fadeInOut {
+              0%, 100% { opacity: 0.5; }
+              50% { opacity: 1; }
+            }
+          `}
+        </style>
       </div>
     );
   }
