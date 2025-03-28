@@ -21,19 +21,21 @@ const AdminTestDetails: React.FC = () => {
   useEffect(() => {
     const handleResize = () => {
       const width = window.innerWidth;
+      const isMulDiv = test?.sections[0]?.section_type === "MUL_DIV";
+      
       if (width < 640) { // mobile
         setQuestionsPerPage(3);
       } else if (width < 1024) { // tablet
-        setQuestionsPerPage(5);
+        setQuestionsPerPage(4);
       } else { // desktop
-        setQuestionsPerPage(8);
+        setQuestionsPerPage(isMulDiv ? 6 : 10); // 6 for mul/div, 10 for addition
       }
     };
 
     handleResize(); // Initial call
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [test]);
 
   useEffect(() => {
     const fetchTests = async () => {
@@ -85,6 +87,41 @@ const AdminTestDetails: React.FC = () => {
       );
     }
     return <div className="text-right font-mono text-lg sm:text-xl md:text-2xl">{num}</div>;
+  };
+
+  const renderMulDivQuestions = (questions: Question[]) => {
+    return questions.map((question) => {
+      const numbers = parseQuestionText(question.text);
+      const operatorSign = question.question_type === 'multiply' ? '×' : '÷';
+      
+      return (
+        <tr key={question.uuid} className="border-b border-indigo-100/50 dark:border-indigo-800/50 hover:bg-indigo-50/30 dark:hover:bg-indigo-900/30 transition-colors duration-150">
+          <td className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-center text-base sm:text-lg font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/30 dark:bg-indigo-900/10 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+            {question.order}
+          </td>
+          <td className="w-20 sm:w-24 px-2 sm:px-3 py-2.5 text-right text-lg sm:text-xl text-gray-900 dark:text-white whitespace-nowrap border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 font-mono">
+            {numbers[0]}
+          </td>
+          <td className="w-12 sm:w-16 px-2 py-2.5 text-center text-lg sm:text-xl text-indigo-600 dark:text-indigo-400 whitespace-nowrap border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 font-mono">
+            {operatorSign}
+          </td>
+          <td className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-left text-lg sm:text-xl text-gray-900 dark:text-white whitespace-nowrap border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 font-mono">
+            {numbers[1]}
+          </td>
+          <td className="w-24 sm:w-28 px-2 sm:px-3 py-2.5 text-center">
+            <div className="inline-block rounded-lg border border-indigo-100 dark:border-indigo-800 bg-white dark:bg-gray-900">
+              <input
+                type="number"
+                value={answers[question.uuid] || ''}
+                onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
+                className="w-14 sm:w-16 py-1.5 text-lg sm:text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600"
+                placeholder="?"
+              />
+            </div>
+          </td>
+        </tr>
+      );
+    });
   };
 
   if (loading) {
@@ -177,7 +214,10 @@ const AdminTestDetails: React.FC = () => {
           <div className="p-4 sm:p-6">
             {test.sections.map((section, sectionIndex) => {
               const { currentQuestions, pagination } = renderPagination(section.questions, sectionIndex);
-              const maxLength = currentQuestions.reduce((max, question) => {
+              const isMulDiv = section.section_type === "MUL_DIV";
+              
+              // For addition sections, keep the existing maxLength calculation
+              const maxLength = isMulDiv ? 1 : currentQuestions.reduce((max, question) => {
                 const numbers = parseQuestionText(question.text);
                 return Math.max(max, numbers.length);
               }, 0);
@@ -189,70 +229,93 @@ const AdminTestDetails: React.FC = () => {
                       <span className="text-lg font-bold text-white">{sectionIndex + 1}</span>
                     </div>
                     <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                      {section.section_type === 'add' ? 'Addition' : 'Multiplication'} Fun!
+                      {section.section_type === "MUL_DIV" ? "Multiplication & Division" : "Addition"} Fun!
                     </h2>
                   </div>
                   
-                  <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg border-2 border-indigo-200 dark:border-indigo-800">
-                    <table className="min-w-full border-collapse">
+                  <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-indigo-100 dark:border-indigo-800">
+                    <table className="w-full border-collapse">
                       <thead>
-                        <tr>
-                          <th className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-left text-sm sm:text-base font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+                        <tr className="border-b border-indigo-100 dark:border-indigo-800">
+                          <th className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-left text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
                             No.
                           </th>
-                          {currentQuestions.map((question) => (
-                            <th
-                              key={question.uuid}
-                              className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-sm sm:text-base font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
-                            >
-                              Q{question.order}
-                            </th>
-                          ))}
+                          {isMulDiv ? (
+                            <>
+                              <th className="w-20 sm:w-24 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
+                                First Number
+                              </th>
+                              <th className="w-12 sm:w-16 px-2 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
+                                Operation
+                              </th>
+                              <th className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
+                                Second Number
+                              </th>
+                              <th className="w-24 sm:w-28 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20">
+                                Answer
+                              </th>
+                            </>
+                          ) : (
+                            currentQuestions.map((question) => (
+                              <th
+                                key={question.uuid}
+                                className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-sm sm:text-base font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
+                              >
+                                Q{question.order}
+                              </th>
+                            ))
+                          )}
                         </tr>
                       </thead>
-                      <tbody>
-                        {Array.from({ length: maxLength }).map((_, rowIndex) => {
-                          const bottomUpIndex = maxLength - rowIndex - 1;
-                          return (
-                            <tr key={rowIndex}>
-                              <td className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-base sm:text-lg font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
-                                {rowIndex + 1}
-                              </td>
-                              {currentQuestions.map((question) => {
-                                const numbers = parseQuestionText(question.text);
-                                return (
-                                  <td
-                                    key={question.uuid}
-                                    className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-base sm:text-lg text-gray-900 dark:text-white whitespace-nowrap border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
-                                  >
-                                    <div className="w-full flex justify-end pr-2 font-mono">
-                                      {numbers[bottomUpIndex] !== undefined ? formatNumber(numbers[bottomUpIndex]) : ''}
-                                    </div>
+                      <tbody className="divide-y divide-indigo-100/50 dark:divide-indigo-800/50">
+                        {isMulDiv ? (
+                          renderMulDivQuestions(currentQuestions)
+                        ) : (
+                          <>
+                            {Array.from({ length: maxLength }).map((_, rowIndex) => {
+                              const bottomUpIndex = maxLength - rowIndex - 1;
+                              return (
+                                <tr key={rowIndex}>
+                                  <td className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-base sm:text-lg font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+                                    {rowIndex + 1}
                                   </td>
-                                );
-                              })}
+                                  {currentQuestions.map((question) => {
+                                    const numbers = parseQuestionText(question.text);
+                                    return (
+                                      <td
+                                        key={question.uuid}
+                                        className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-base sm:text-lg text-gray-900 dark:text-white whitespace-nowrap border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
+                                      >
+                                        <div className="w-full flex justify-end pr-2 font-mono">
+                                          {numbers[bottomUpIndex] !== undefined ? formatNumber(numbers[bottomUpIndex]) : ''}
+                                        </div>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                            <tr>
+                              <td className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center text-base sm:text-lg font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+                                Answer
+                              </td>
+                              {currentQuestions.map((question) => (
+                                <td
+                                  key={question.uuid}
+                                  className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
+                                >
+                                  <input
+                                    type="number"
+                                    value={answers[question.uuid] || ''}
+                                    onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
+                                    className="w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono bg-indigo-50 dark:bg-indigo-900/30 border-2 border-indigo-300 dark:border-indigo-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600"
+                                    placeholder="?"
+                                  />
+                                </td>
+                              ))}
                             </tr>
-                          );
-                        })}
-                        <tr>
-                          <td className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center text-base sm:text-lg font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
-                            Answer
-                          </td>
-                          {currentQuestions.map((question) => (
-                            <td
-                              key={question.uuid}
-                              className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
-                            >
-                              <input
-                                type="number"
-                                value={answers[question.uuid] || ''}
-                                onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
-                                className="w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono bg-indigo-50 dark:bg-indigo-900/30 border-2 border-indigo-300 dark:border-indigo-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600"
-                                placeholder="?"
-                              />
-                            </td>
-                          ))}
-                        </tr>
+                          </>
+                        )}
                       </tbody>
                     </table>
                   </div>

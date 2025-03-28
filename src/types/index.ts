@@ -29,6 +29,7 @@ export interface Question {
   text: string;
   order: number;
   marks: number;
+  question_type?: 'multiply' | 'divide' | 'add';
 }
 
 export interface Section {
