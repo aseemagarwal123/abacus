@@ -21,26 +21,40 @@ const StudentTestDetails: React.FC = () => {
   const [remainingTime, setRemainingTime] = useState<number>(0);
   const [studentTestUuid, setStudentTestUuid] = useState<string | null>(null);
   const initializedRef = useRef(false);
-  const [submittingAnswer, setSubmittingAnswer] = useState(false);
+  const [submittingQuestionId, setSubmittingQuestionId] = useState<string | null>(null);
   const [currentSection, setCurrentSection] = useState(0);
   const inputRefs = useRef<Record<string, HTMLInputElement>>({});
 
   useEffect(() => {
     const handleResize = () => {
       const width = window.innerWidth;
-      if (width < 640) { // mobile
-        setQuestionsPerPage(3);
-      } else if (width < 1024) { // tablet
-        setQuestionsPerPage(5);
-      } else { // desktop
-        setQuestionsPerPage(8);
+      const isMulDiv = test?.sections[0]?.section_type === "MUL_DIV";
+      
+      if (isMulDiv) {
+        // Pagination for multiplication/division questions
+        if (width < 640) { // mobile
+          setQuestionsPerPage(3);
+        } else if (width < 1024) { // tablet
+          setQuestionsPerPage(4);
+        } else { // desktop
+          setQuestionsPerPage(6);
+        }
+      } else {
+        // Original pagination for addition questions
+        if (width < 640) { // mobile
+          setQuestionsPerPage(3);
+        } else if (width < 1024) { // tablet
+          setQuestionsPerPage(5);
+        } else { // desktop
+          setQuestionsPerPage(10); // Ensure 10 questions per page for addition on desktop
+        }
       }
     };
 
     handleResize(); // Initial call
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [test]);
 
   useEffect(() => {
     const initializeTest = async () => {
@@ -304,7 +318,7 @@ const StudentTestDetails: React.FC = () => {
   const debouncedSubmitAnswer = useCallback(
     debounce(async (studentTestUuid: string, questionUuid: string, answerText: string) => {
       try {
-        setSubmittingAnswer(true);
+        setSubmittingQuestionId(questionUuid);
         await testApi.submitAnswer(studentTestUuid, questionUuid, answerText);
         console.log('Answer submitted successfully');
         
@@ -328,7 +342,7 @@ const StudentTestDetails: React.FC = () => {
       } catch (error) {
         console.error('Error submitting answer:', error);
       } finally {
-        setSubmittingAnswer(false);
+        setSubmittingQuestionId(null);
       }
     }, 1000),
     [findNextQuestionInfo, currentPage]
@@ -520,6 +534,53 @@ const StudentTestDetails: React.FC = () => {
     };
   };
 
+  const renderMulDivQuestions = (questions: Question[]) => {
+    return questions.map((question) => {
+      const numbers = parseQuestionText(question.text);
+      const operatorSign = question.question_type === 'multiply' ? '×' : '÷';
+      const isSubmitting = submittingQuestionId === question.uuid;
+      
+      return (
+        <tr key={question.uuid} className="border-b border-indigo-100/50 dark:border-indigo-800/50 hover:bg-indigo-50/30 dark:hover:bg-indigo-900/30 transition-colors duration-150">
+          <td className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-center text-base sm:text-lg font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/30 dark:bg-indigo-900/10 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+            {question.order}
+          </td>
+          <td className="w-20 sm:w-24 px-2 sm:px-3 py-2.5 text-right text-lg sm:text-xl text-gray-900 dark:text-white whitespace-nowrap border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 font-mono">
+            {numbers[0]}
+          </td>
+          <td className="w-12 sm:w-16 px-2 py-2.5 text-center text-lg sm:text-xl text-indigo-600 dark:text-indigo-400 whitespace-nowrap border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 font-mono">
+            {operatorSign}
+          </td>
+          <td className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-left text-lg sm:text-xl text-gray-900 dark:text-white whitespace-nowrap border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 font-mono">
+            {numbers[1]}
+          </td>
+          <td className="w-24 sm:w-28 px-2 sm:px-3 py-2.5 text-center">
+            <div className={`inline-block rounded-lg border transition-colors duration-200 ${
+              isSubmitting 
+                ? 'border-yellow-300 dark:border-yellow-700' 
+                : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
+            } bg-white dark:bg-gray-900`}>
+              <input
+                ref={el => {
+                  if (el) {
+                    inputRefs.current[question.uuid] = el;
+                  }
+                }}
+                type="number"
+                value={answers[question.uuid] || ''}
+                onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(question.uuid, e)}
+                className="w-14 sm:w-16 py-1.5 text-lg sm:text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600"
+                placeholder="?"
+                disabled={!testStarted}
+              />
+            </div>
+          </td>
+        </tr>
+      );
+    });
+  };
+
   return (
     <div className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 min-h-screen">
       <div className="max-w-full mx-auto">
@@ -572,6 +633,54 @@ const StudentTestDetails: React.FC = () => {
             ) : (
               test.sections.map((section, sectionIndex) => {
                 const { currentQuestions, pagination } = renderPagination(section.questions, sectionIndex);
+                const isMulDiv = section.section_type === "MUL_DIV";
+                
+                if (isMulDiv) {
+                  return (
+                    <div key={section.uuid} className="mb-8 last:mb-0">
+                      <div className="flex items-center mb-6">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center mr-3 shadow-lg">
+                          <span className="text-lg font-bold text-white">{sectionIndex + 1}</span>
+                        </div>
+                        <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                          Multiplication & Division Fun!
+                        </h2>
+                      </div>
+                      
+                      <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-indigo-100 dark:border-indigo-800">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="border-b border-indigo-100 dark:border-indigo-800">
+                              <th className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-left text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+                                No.
+                              </th>
+                              <th className="w-20 sm:w-24 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
+                                First Number
+                              </th>
+                              <th className="w-12 sm:w-16 px-2 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
+                                Operation
+                              </th>
+                              <th className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
+                                Second Number
+                              </th>
+                              <th className="w-24 sm:w-28 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20">
+                                Answer
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-indigo-100/50 dark:divide-indigo-800/50">
+                            {renderMulDivQuestions(currentQuestions)}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="mt-6">
+                        {pagination}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // For addition sections, keep the existing rendering logic
                 const maxLength = currentQuestions.reduce((max, question) => {
                   const numbers = parseQuestionText(question.text);
                   return Math.max(max, numbers.length);
@@ -638,25 +747,30 @@ const StudentTestDetails: React.FC = () => {
                                 key={question.uuid}
                                 className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
                               >
-                                <input
-                                  ref={el => {
-                                    if (el) {
-                                      inputRefs.current[question.uuid] = el;
-                                    }
-                                  }}
-                                  type="number"
-                                  value={answers[question.uuid] || ''}
-                                  onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
-                                  onKeyDown={(e) => handleKeyDown(question.uuid, e)}
-                                  className={`w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono 
-                                    bg-indigo-50 dark:bg-indigo-900/30 border-2 
-                                    ${submittingAnswer ? 'border-yellow-300 dark:border-yellow-700' : 'border-indigo-300 dark:border-indigo-700'} 
-                                    rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 
-                                    dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600
-                                    transition-colors duration-200`}
-                                  placeholder="?"
-                                  disabled={!testStarted}
-                                />
+                                <div className={`inline-block rounded-lg border transition-colors duration-200 ${
+                                  submittingQuestionId === question.uuid 
+                                    ? 'border-yellow-300 dark:border-yellow-700' 
+                                    : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
+                                } bg-white dark:bg-gray-900`}>
+                                  <input
+                                    ref={el => {
+                                      if (el) {
+                                        inputRefs.current[question.uuid] = el;
+                                      }
+                                    }}
+                                    type="number"
+                                    value={answers[question.uuid] || ''}
+                                    onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
+                                    onKeyDown={(e) => handleKeyDown(question.uuid, e)}
+                                    className="w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono 
+                                      bg-transparent
+                                      rounded-lg focus:outline-none
+                                      dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600
+                                      transition-colors duration-200"
+                                    placeholder="?"
+                                    disabled={!testStarted}
+                                  />
+                                </div>
                               </td>
                             ))}
                           </tr>
