@@ -121,13 +121,13 @@ const AdminTestDetails: React.FC = () => {
             {numbers[1]}
           </td>
           <td className="w-24 sm:w-28 px-2 sm:px-3 py-2.5 text-center">
-            <div className="inline-block rounded-lg border border-indigo-100 dark:border-indigo-800 bg-white dark:bg-gray-900">
+            <div className="inline-block rounded-lg border border-indigo-100 dark:border-indigo-800 bg-gray-50 dark:bg-gray-900">
               <input
                 type="number"
                 value={answers[question.uuid] || ''}
-                onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
-                className="w-14 sm:w-16 py-1.5 text-lg sm:text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600"
-                placeholder="?"
+                disabled
+                className="w-14 sm:w-16 py-1.5 text-lg sm:text-xl text-center font-mono bg-transparent cursor-not-allowed opacity-50 dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600"
+                placeholder="-"
               />
             </div>
           </td>
@@ -181,14 +181,6 @@ const AdminTestDetails: React.FC = () => {
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
-          {sectionIndex === test.sections.length - 1 && (
-            <button
-              onClick={handleSubmit}
-              className="px-6 py-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-medium rounded-full hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 shadow-lg"
-            >
-              Submit Answers
-            </button>
-          )}
         </div>
       )
     };
@@ -319,9 +311,9 @@ const AdminTestDetails: React.FC = () => {
                                   <input
                                     type="number"
                                     value={answers[question.uuid] || ''}
-                                    onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
-                                    className="w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono bg-indigo-50 dark:bg-indigo-900/30 border-2 border-indigo-300 dark:border-indigo-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600"
-                                    placeholder="?"
+                                    disabled
+                                    className="w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono bg-gray-50 dark:bg-gray-900 border-2 border-indigo-200 dark:border-indigo-700 rounded-lg cursor-not-allowed opacity-50 dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600"
+                                    placeholder="-"
                                   />
                                 </td>
                               ))}
