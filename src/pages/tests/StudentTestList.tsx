@@ -26,21 +26,21 @@ const StudentTestList: React.FC = () => {
   const tabs = [
     {
       id: 'upcoming',
-      label: 'Upcoming Tests',
+      label: 'Not Attempted',
       icon: <Clock className="w-5 h-5" />,
       count: studentTests?.upcoming_tests?.count || 0,
       results: studentTests?.upcoming_tests?.results || []
     },
     {
       id: 'in_progress',
-      label: 'In Progress',
+      label: 'Started / Visited',
       icon: <PlayCircle className="w-5 h-5" />,
       count: studentTests?.in_progress_tests?.count || 0,
       results: studentTests?.in_progress_tests?.results || []
     },
     {
       id: 'past',
-      label: 'Past Tests',
+      label: 'Completed Tests',
       icon: <History className="w-5 h-5" />,
       count: studentTests?.past_tests?.count || 0,
       results: studentTests?.past_tests?.results || []
@@ -118,10 +118,10 @@ const StudentTestList: React.FC = () => {
                   <span className="font-medium">{test.test?.duration_minutes || test.duration_minutes} minutes</span>
                 </div>
 
-                <div className="flex items-center text-purple-700 dark:text-purple-400 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
+                {/* <div className="flex items-center text-purple-700 dark:text-purple-400 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                   <Timer className="w-5 h-5 mr-2" />
                   <span className="font-medium">Time Left: {Math.floor((test.remaining_duration || (test.test?.duration_remaining || test.duration_remaining || 0)) / 60)} minutes</span>
-                </div>
+                </div> */}
                 
                 <div className="flex items-center text-amber-700 dark:text-amber-400 bg-white/50 dark:bg-gray-800/50 p-2 rounded-lg">
                   <Calendar className="w-5 h-5 mr-2" />

@@ -146,7 +146,7 @@ const CreateTestModal: React.FC<CreateTestModalProps> = ({ isOpen, onClose, onSu
                 >
                   <option value="">Select a section type</option>
                   <option value="ADD">Addition</option>
-                  <option value="MULTIPLY">Multiplication</option>
+                  <option value="MUL_DIV">Multiplication</option>
                 </select>
                 <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
                   <svg className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
