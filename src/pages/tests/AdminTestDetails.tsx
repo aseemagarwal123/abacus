@@ -23,12 +23,24 @@ const AdminTestDetails: React.FC = () => {
       const width = window.innerWidth;
       const isMulDiv = test?.sections[0]?.section_type === "MUL_DIV";
       
-      if (width < 640) { // mobile
-        setQuestionsPerPage(3);
-      } else if (width < 1024) { // tablet
-        setQuestionsPerPage(4);
-      } else { // desktop
-        setQuestionsPerPage(isMulDiv ? 6 : 10); // 6 for mul/div, 10 for addition
+      if (isMulDiv) {
+        // Pagination for multiplication/division questions
+        if (width < 640) { // mobile
+          setQuestionsPerPage(3);
+        } else if (width < 1024) { // tablet
+          setQuestionsPerPage(4);
+        } else { // desktop
+          setQuestionsPerPage(6);
+        }
+      } else {
+        // Original pagination for addition questions
+        if (width < 640) { // mobile
+          setQuestionsPerPage(3);
+        } else if (width < 1024) { // tablet
+          setQuestionsPerPage(5);
+        } else { // desktop
+          setQuestionsPerPage(8); // Ensure 10 questions per page for addition on desktop
+        }
       }
     };
 
