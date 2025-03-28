@@ -33,7 +33,7 @@ const StudentTestList: React.FC = () => {
     },
     {
       id: 'in_progress',
-      label: 'Started / Visited',
+      label: 'Started',
       icon: <PlayCircle className="w-5 h-5" />,
       count: studentTests?.in_progress_tests?.count || 0,
       results: studentTests?.in_progress_tests?.results || []
