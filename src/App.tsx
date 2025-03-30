@@ -23,49 +23,56 @@ import StudentTestDetails from './pages/tests/StudentTestDetails';
 import StudentTestList from './pages/tests/StudentTestList';
 import StudentTestResult from './pages/tests/StudentTestResult';
 import { Toaster } from 'react-hot-toast';
+import { useSelector } from 'react-redux';
+import { RootState } from './store/store';
+
+const AppRoutes = () => {
+  const userType = useSelector((state: RootState) => state.auth.user?.user_type);
+
+  return (
+    <BrowserRouter>
+      <Toaster position="top-right" />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<DefaultRedirect />} />
+        
+        <Route element={<PrivateRoute />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/dashboard" element={<AdminDashboard />} />
+            <Route path="/centre-dashboard" element={<CentreDashboard />} />
+            <Route path="/student-dashboard" element={<StudentDashboard />} />
+            <Route path="/student-test/:id/result" element={<StudentTestResult />} />
+            <Route path="/centres" element={<CentresList />} />
+            <Route path="/centres/:id" element={<CentreDetails />} />
+            <Route path="/centres/new" element={<CentreForm />} />
+            <Route path="/centres/:id/edit" element={<CentreForm />} />
+            <Route path="/students" element={<StudentsList />} />
+            <Route path="/students/:id" element={<StudentDetails />} />
+            <Route path="/students/new" element={<StudentForm />} />
+            <Route path="/students/:id/edit" element={<StudentForm />} />
+            <Route path="/logs" element={<ActivityLogs />} />
+            
+            {/* Test Routes based on user type */}
+            <Route 
+              path="/tests" 
+              element={userType === 'ADMIN' ? <AdminTestList /> : <StudentTestList />} 
+            />
+            <Route 
+              path="/tests/:id" 
+              element={userType === 'ADMIN' ? <AdminTestDetails /> : <StudentTestDetails />} 
+            />
+          </Route>
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+};
 
 function App() {
-  const userType = store.getState().auth.user?.user_type;
-
   return (
     <Provider store={store}>
       <AuthProvider>
-        <BrowserRouter>
-          <Toaster position="top-right" />
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/" element={<DefaultRedirect />} />
-            
-            <Route element={<PrivateRoute />}>
-              <Route element={<DashboardLayout />}>
-                <Route path="/dashboard" element={<AdminDashboard />} />
-                <Route path="/centre-dashboard" element={<CentreDashboard />} />
-                <Route path="/student-dashboard" element={<StudentDashboard />} />
-                <Route path="/student-test/:id/result" element={<StudentTestResult />} />
-                <Route path="/centres" element={<CentresList />} />
-                <Route path="/centres/:id" element={<CentreDetails />} />
-                <Route path="/centres/new" element={<CentreForm />} />
-                <Route path="/centres/:id/edit" element={<CentreForm />} />
-                <Route path="/students" element={<StudentsList />} />
-                <Route path="/students/:id" element={<StudentDetails />} />
-                <Route path="/students/new" element={<StudentForm />} />
-                <Route path="/students/:id/edit" element={<StudentForm />} />
-                <Route path="/logs" element={<ActivityLogs />} />
-                
-                {/* Test Routes based on user type */}
-                {userType === 'ADMIN' ? (
-                  <Route path="/tests" element={<AdminTestList/>} />
-                ) : (
-                  <Route path="/tests" element={<StudentTestList />} />
-                )}
-                <Route 
-                  path="/tests/:id" 
-                  element={userType === 'ADMIN' ? <AdminTestDetails /> : <StudentTestDetails />} 
-                />
-              </Route>
-            </Route>
-          </Routes>
-        </BrowserRouter>
+        <AppRoutes />
       </AuthProvider>
     </Provider>
   );
