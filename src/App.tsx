@@ -22,6 +22,7 @@ import AdminTestDetails from './pages/tests/AdminTestDetails';
 import StudentTestDetails from './pages/tests/StudentTestDetails';
 import StudentTestList from './pages/tests/StudentTestList';
 import StudentTestResult from './pages/tests/StudentTestResult';
+import { Toaster } from 'react-hot-toast';
 
 function App() {
   const userType = store.getState().auth.user?.user_type;
@@ -30,6 +31,7 @@ function App() {
     <Provider store={store}>
       <AuthProvider>
         <BrowserRouter>
+          <Toaster position="top-right" />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<DefaultRedirect />} />

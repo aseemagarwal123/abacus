@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Clock, ArrowLeft, ChevronLeft, ChevronRight, PlayCircle } from 'lucide-react';
+import { Clock, ArrowLeft, ChevronLeft, ChevronRight, PlayCircle, Wifi, WifiOff } from 'lucide-react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store/store';
 import { setTests } from '../../store/slices/testSlice';
 import { testApi } from '../../services/api/test';
 import { Question, Test } from '../../types';
 import debounce from 'lodash/debounce';
+import { toast } from 'react-hot-toast';
 
 const StudentTestDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,6 +26,17 @@ const StudentTestDetails: React.FC = () => {
   const [currentSection, setCurrentSection] = useState(0);
   const inputRefs = useRef<Record<string, HTMLInputElement>>({});
   const [showTimeUpModal, setShowTimeUpModal] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [pendingSubmissions, setPendingSubmissions] = useState<Array<{
+    questionUuid: string;
+    answer: string;
+    timestamp: number;
+  }>>([]);
+  const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
+  const [isTimeExpired, setIsTimeExpired] = useState(false);
+  const [pendingTestSubmission, setPendingTestSubmission] = useState(false);
+  const [isPendingSubmission, setIsPendingSubmission] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -59,20 +71,31 @@ const StudentTestDetails: React.FC = () => {
 
   const handleTimeUp = useCallback(async () => {
     setShowTimeUpModal(true);
-    // Wait for 2 seconds to show the modal
     await new Promise(resolve => setTimeout(resolve, 4000));
     setShowTimeUpModal(false);
     
-    // Then submit the test
-    if (studentTestUuid) {
-      await testApi.submitStudentTest(studentTestUuid);
-      if (id) {
-        localStorage.removeItem(`test_state_${id}`);
+    if (!isOnline) {
+      // Store time expiration state
+      setIsTimeExpired(true);
+      setIsPendingSubmission(true); // Also set pending submission to lock the UI
+      localStorage.setItem(`test_time_expired_${studentTestUuid}`, 'true');
+      toast('Time is up! Your test will be submitted when you are back online.', {
+        duration: 4000,
+        icon: <WifiOff className="w-5 h-5 text-yellow-500" />,
+      });
+    } else {
+      // Submit test immediately if online
+      if (studentTestUuid) {
+        await testApi.submitStudentTest(studentTestUuid);
+        if (id) {
+          localStorage.removeItem(`test_state_${id}`);
+        }
+        localStorage.removeItem(`test_time_${studentTestUuid}`);
+        localStorage.removeItem(`test_time_expired_${studentTestUuid}`);
+        navigate('/student-dashboard');
       }
-      localStorage.removeItem(`test_time_${studentTestUuid}`);
-      navigate('/student-dashboard');
     }
-  }, [studentTestUuid, id, navigate]);
+  }, [studentTestUuid, id, navigate, isOnline]);
 
   const initializeTest = async () => {
     if (initializedRef.current || !id) return;
@@ -97,6 +120,10 @@ const StudentTestDetails: React.FC = () => {
         const { student_test_uuid, remaining_time } = JSON.parse(savedTestState);
         console.log('Found saved test state:', { student_test_uuid, remaining_time });
         
+        // Check if test was expired offline
+        const wasExpiredOffline = localStorage.getItem(`test_time_expired_${student_test_uuid}`) === 'true';
+        console.log('Was test expired offline?', wasExpiredOffline);
+
         try {
           const durationData = await testApi.getRemainingDuration(student_test_uuid);
           console.log('Fetched remaining duration:', durationData);
@@ -104,6 +131,73 @@ const StudentTestDetails: React.FC = () => {
           setStudentTestUuid(student_test_uuid);
           
           if (durationData.status === 'IN_PROGRESS') {
+            // If test expired offline and we're now online, submit immediately
+            if (wasExpiredOffline && navigator.onLine) {
+              console.log('Test was expired offline and now online, submitting...');
+              setTestStarted(true);
+              setRemainingTime(0);
+              setIsTimeExpired(true);
+              setIsPendingSubmission(true);
+              
+              // Show time up modal briefly
+              setShowTimeUpModal(true);
+              setTimeout(async () => {
+                setShowTimeUpModal(false);
+                
+                // Show loading toast for sync and submit process
+                const syncToastId = toast.loading('Syncing your offline answers...', {
+                  icon: '🔄',
+                });
+
+                try {
+                  // First sync any pending answers
+                  const pendingSubmissions = getPendingSubmissions();
+                  for (const submission of pendingSubmissions) {
+                    await testApi.submitAnswer(
+                      student_test_uuid,
+                      submission.questionUuid,
+                      submission.answer
+                    );
+                  }
+                  clearPendingSubmissions();
+                  
+                  // Update sync toast to success
+                  toast.success('All offline answers have been synced!', {
+                    id: syncToastId,
+                    duration: 2000,
+                    icon: <Wifi className="w-5 h-5 text-green-500" />,
+                  });
+
+                  // Show loading toast for test submission
+                  const submitToastId = toast.loading('Submitting your expired test...', {
+                    icon: '📝',
+                  });
+                  
+                  // Then submit the test
+                  await testApi.submitStudentTest(student_test_uuid);
+                  
+                  // Clean up localStorage
+                  localStorage.removeItem(`test_state_${id}`);
+                  localStorage.removeItem(`test_time_${student_test_uuid}`);
+                  localStorage.removeItem(`test_time_expired_${student_test_uuid}`);
+                  
+                  // Update submit toast to success
+                  toast.success('Your test has been submitted successfully!', {
+                    id: submitToastId,
+                    duration: 3000,
+                    icon: '✅',
+                  });
+                  navigate('/student-dashboard');
+                } catch (error) {
+                  console.error('Error submitting expired test:', error);
+                  toast.error('Failed to sync and submit test. Please try again.', {
+                    duration: 4000,
+                  });
+                }
+              }, 2000);
+              return;
+            }
+
             // If time is up but test is still in progress, show modal and submit
             if (durationData.remaining_duration <= 0) {
               setTestStarted(true);
@@ -115,7 +209,7 @@ const StudentTestDetails: React.FC = () => {
               return;
             }
 
-            // Rest of the existing initialization code...
+            // Normal test continuation
             setTestStarted(true);
             setRemainingTime(durationData.remaining_duration);
             localStorage.setItem(`test_state_${id}`, JSON.stringify({
@@ -193,6 +287,167 @@ const StudentTestDetails: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Function to get pending submissions from localStorage
+  const getPendingSubmissions = useCallback(() => {
+    if (!studentTestUuid) return [];
+    const saved = localStorage.getItem(`pending_submissions_${studentTestUuid}`);
+    return saved ? JSON.parse(saved) : [];
+  }, [studentTestUuid]);
+
+  // Function to save pending submission to localStorage
+  const savePendingSubmission = useCallback((submission: { questionUuid: string; answer: string; timestamp: number }) => {
+    if (!studentTestUuid) return;
+    const currentSubmissions = getPendingSubmissions();
+    const updatedSubmissions = [...currentSubmissions, submission];
+    localStorage.setItem(`pending_submissions_${studentTestUuid}`, JSON.stringify(updatedSubmissions));
+  }, [studentTestUuid, getPendingSubmissions]);
+
+  // Function to clear pending submissions from localStorage
+  const clearPendingSubmissions = useCallback(() => {
+    if (!studentTestUuid) return;
+    localStorage.removeItem(`pending_submissions_${studentTestUuid}`);
+  }, [studentTestUuid]);
+
+  // Online/Offline detection
+  useEffect(() => {
+    const handleOnline = async () => {
+      console.log('Online event detected');
+      setIsOnline(true);
+      setIsOfflineMode(false);
+      
+      // Wait for state to be updated
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      toast.success('You are back online!', {
+        duration: 2000,
+        icon: <Wifi className="w-5 h-5 text-green-500" />,
+      });
+      
+      // Force update isOnline in the closure
+      const forceSync = async () => {
+        console.log('Force syncing with online status:', true);
+        try {
+          const pendingSubmissions = getPendingSubmissions();
+          console.log('Retrieved pending submissions:', pendingSubmissions);
+
+          if (pendingSubmissions.length > 0) {
+            // Show loading toast for sync process
+            const syncToastId = toast.loading('Syncing your offline answers...', {
+              icon: '🔄',
+            });
+
+            try {
+              // First sync all pending answers
+              for (const submission of pendingSubmissions) {
+                console.log('Attempting to submit answer:', submission);
+                await testApi.submitAnswer(
+                  studentTestUuid!,
+                  submission.questionUuid,
+                  submission.answer
+                );
+                console.log('Successfully submitted answer:', submission.questionUuid);
+              }
+              
+              clearPendingSubmissions();
+              setLastSyncTime(Date.now());
+              
+              // Update sync toast to success
+              toast.success('All offline answers have been synced!', {
+                id: syncToastId,
+                duration: 3000,
+                icon: <Wifi className="w-5 h-5 text-green-500" />,
+              });
+            } catch (error) {
+              // Update sync toast to error if sync fails
+              toast.error('Failed to sync some answers. Please try again.', {
+                id: syncToastId,
+                duration: 4000,
+              });
+              throw error; // Propagate error to outer catch block
+            }
+          }
+
+          // Check for either time expiration or manual submission
+          const isTimeExpired = localStorage.getItem(`test_time_expired_${studentTestUuid}`);
+          const hasTestSubmissionPending = localStorage.getItem(`test_submission_pending_${studentTestUuid}`);
+          
+          console.log('Checking submission conditions:', {
+            isTimeExpired: isTimeExpired === 'true',
+            hasTestSubmissionPending: hasTestSubmissionPending === 'true'
+          });
+          
+          // Submit if either time expired or manual submission pending
+          if (isTimeExpired === 'true' || hasTestSubmissionPending === 'true') {
+            // Show loading toast for test submission
+            const submitToastId = toast.loading(
+              isTimeExpired === 'true' 
+                ? 'Submitting your expired test...'
+                : 'Submitting your test...',
+              { icon: '📝' }
+            );
+
+            try {
+              console.log('Submitting test due to:', isTimeExpired === 'true' ? 'time expiration' : 'manual submission');
+              await testApi.submitStudentTest(studentTestUuid!);
+              
+              // Clean up localStorage
+              if (id) {
+                localStorage.removeItem(`test_state_${id}`);
+              }
+              localStorage.removeItem(`test_time_${studentTestUuid}`);
+              localStorage.removeItem(`test_time_expired_${studentTestUuid}`);
+              localStorage.removeItem(`test_submission_pending_${studentTestUuid}`);
+              console.log('Test submitted and localStorage cleaned up');
+              
+              // Update submit toast to success
+              toast.success('Your test has been submitted successfully!', {
+                id: submitToastId,
+                duration: 3000,
+                icon: '✅',
+              });
+              navigate('/student-dashboard');
+            } catch (error) {
+              // Update submit toast to error if submission fails
+              toast.error('Failed to submit test. Please try again.', {
+                id: submitToastId,
+                duration: 4000,
+              });
+              throw error;
+            }
+          }
+        } catch (error) {
+          console.error('Error during forced sync:', error);
+        }
+      };
+
+      // Add a small delay and then force sync
+      setTimeout(forceSync, 500);
+    };
+
+    const handleOffline = () => {
+      console.log('Offline event detected');
+      setIsOnline(false);
+      setIsOfflineMode(true);
+      toast.error('You are offline. Your answers will be saved locally.', {
+        duration: 4000,
+        icon: <WifiOff className="w-5 h-5 text-red-500" />,
+      });
+    };
+
+    // Initial check for online status
+    console.log('Initial online status:', navigator.onLine);
+    setIsOnline(navigator.onLine);
+    setIsOfflineMode(!navigator.onLine);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [studentTestUuid, getPendingSubmissions, clearPendingSubmissions]);
 
   // Update the periodic check effect to handle different statuses
   useEffect(() => {
@@ -302,66 +557,6 @@ const StudentTestDetails: React.FC = () => {
     return { uuid: null, page: 1 };
   }, [test, questionsPerPage]);
 
-  // Update the debounced submit answer function to handle focus movement and page changes
-  const debouncedSubmitAnswer = useCallback(
-    debounce(async (studentTestUuid: string, questionUuid: string, answerText: string) => {
-      try {
-        setSubmittingQuestionId(questionUuid);
-        await testApi.submitAnswer(studentTestUuid, questionUuid, answerText);
-        console.log('Answer submitted successfully');
-        
-        // Find next question info and handle page change
-        const { uuid: nextQuestionUuid, page: nextPage } = findNextQuestionInfo(questionUuid);
-        if (nextQuestionUuid) {
-          // If we need to change page, do it before focusing
-          if (nextPage !== currentPage) {
-            setCurrentPage(nextPage);
-            // Add a small delay to allow the page change to complete before focusing
-            setTimeout(() => {
-              if (inputRefs.current[nextQuestionUuid]) {
-                inputRefs.current[nextQuestionUuid].focus();
-              }
-            }, 100);
-          } else if (inputRefs.current[nextQuestionUuid]) {
-            // If we're staying on the same page, focus immediately
-            inputRefs.current[nextQuestionUuid].focus();
-          }
-        }
-      } catch (error) {
-        console.error('Error submitting answer:', error);
-      } finally {
-        setSubmittingQuestionId(null);
-      }
-    }, 1000),
-    [findNextQuestionInfo, currentPage]
-  );
-
-  // Update the keydown handler to use the new findNextQuestionInfo function
-  const handleKeyDown = useCallback((questionUuid: string, e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      const { uuid: nextQuestionUuid, page: nextPage } = findNextQuestionInfo(questionUuid);
-      if (nextQuestionUuid) {
-        if (nextPage !== currentPage) {
-          setCurrentPage(nextPage);
-          setTimeout(() => {
-            if (inputRefs.current[nextQuestionUuid]) {
-              inputRefs.current[nextQuestionUuid].focus();
-            }
-          }, 100);
-        } else if (inputRefs.current[nextQuestionUuid]) {
-          inputRefs.current[nextQuestionUuid].focus();
-        }
-      }
-    }
-  }, [findNextQuestionInfo, currentPage]);
-
-  // Cleanup debounced function on unmount
-  useEffect(() => {
-    return () => {
-      debouncedSubmitAnswer.cancel();
-    };
-  }, [debouncedSubmitAnswer]);
-
   // Function to find the page number containing a specific question
   const findQuestionPage = useCallback((questionUuid: string) => {
     if (!test) return 1;
@@ -436,22 +631,6 @@ const StudentTestDetails: React.FC = () => {
     }
   };
 
-  const handleSubmit = async () => {
-    try {
-      if (studentTestUuid && testStarted) {  // Only submit if test was actually started
-        await testApi.submitStudentTest(studentTestUuid);
-        // Clear all test-related items from localStorage
-        if (id) {
-          localStorage.removeItem(`test_state_${id}`);
-        }
-        localStorage.removeItem(`test_time_${studentTestUuid}`);
-        navigate('/student-dashboard');
-      }
-    } catch (error) {
-      console.error('Error submitting test:', error);
-    }
-  };
-
   const formatNumber = (num: number) => {
     if (num < 0) {
       return (
@@ -463,6 +642,171 @@ const StudentTestDetails: React.FC = () => {
     }
     return <div className="text-right font-mono text-lg sm:text-xl md:text-2xl">{num}</div>;
   };
+
+  // Add offline mode UI elements
+  const renderOfflineIndicator = () => {
+    if (!isOnline) {
+      return (
+        <div className="fixed bottom-4 right-4 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2 z-50">
+          <WifiOff className="w-5 h-5" />
+          <span>
+            {isTimeExpired 
+              ? "Time's up! Your test will be submitted when you're back online."
+              : "You are offline. Your answers will be saved locally."}
+          </span>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Add the handleKeyDown function
+  const handleKeyDown = useCallback((questionUuid: string, e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      const { uuid: nextQuestionUuid, page: nextPage } = findNextQuestionInfo(questionUuid);
+      if (nextQuestionUuid) {
+        if (nextPage !== currentPage) {
+          setCurrentPage(nextPage);
+          setTimeout(() => {
+            if (inputRefs.current[nextQuestionUuid]) {
+              inputRefs.current[nextQuestionUuid].focus();
+            }
+          }, 100);
+        } else if (inputRefs.current[nextQuestionUuid]) {
+          inputRefs.current[nextQuestionUuid].focus();
+        }
+      }
+    }
+  }, [findNextQuestionInfo, currentPage]);
+
+  // Update the answer submission logic to handle offline mode
+  const debouncedSubmitAnswer = useCallback(
+    debounce(async (studentTestUuid: string, questionUuid: string, answerText: string) => {
+      try {
+        setSubmittingQuestionId(questionUuid);
+        console.log('Submitting answer:', { studentTestUuid, questionUuid, answerText, isOnline });
+        
+        if (!isOnline) {
+          // Store answer in localStorage if offline
+          savePendingSubmission({
+            questionUuid,
+            answer: answerText,
+            timestamp: Date.now(),
+          });
+          console.log('Answer saved to localStorage for offline sync');
+          toast('Answer saved locally. Will sync when online.', {
+            duration: 2000,
+            icon: <WifiOff className="w-5 h-5 text-yellow-500" />,
+          });
+        } else {
+          // Submit answer online
+          await testApi.submitAnswer(studentTestUuid, questionUuid, answerText);
+          console.log('Answer submitted successfully online');
+        }
+
+        // Find next question info and handle page change
+        const { uuid: nextQuestionUuid, page: nextPage } = findNextQuestionInfo(questionUuid);
+        if (nextQuestionUuid) {
+          if (nextPage !== currentPage) {
+            setCurrentPage(nextPage);
+            setTimeout(() => {
+              if (inputRefs.current[nextQuestionUuid]) {
+                inputRefs.current[nextQuestionUuid].focus();
+              }
+            }, 100);
+          } else if (inputRefs.current[nextQuestionUuid]) {
+            inputRefs.current[nextQuestionUuid].focus();
+          }
+        }
+      } catch (error) {
+        console.error('Error submitting answer:', error);
+        toast.error('Failed to save answer. Please try again.', {
+          duration: 3000,
+        });
+      } finally {
+        setSubmittingQuestionId(null);
+      }
+    }, 1000),
+    [findNextQuestionInfo, currentPage, isOnline, savePendingSubmission]
+  );
+
+  // Update the handleSubmit function to handle offline submission
+  const handleSubmit = async () => {
+    try {
+      if (studentTestUuid && testStarted) {
+        if (!isOnline) {
+          // Store submission intent locally
+          localStorage.setItem(`test_submission_pending_${studentTestUuid}`, 'true');
+          setIsPendingSubmission(true);
+          toast('Your test will be submitted automatically when you are back online.', {
+            duration: 4000,
+            icon: <WifiOff className="w-5 h-5 text-yellow-500" />,
+          });
+        } else {
+          // Show loading toast for online submission
+          const submitToastId = toast.loading('Submitting your test...', {
+            icon: '📝',
+          });
+
+          try {
+            await testApi.submitStudentTest(studentTestUuid);
+            
+            // Clean up localStorage
+            if (id) {
+              localStorage.removeItem(`test_state_${id}`);
+            }
+            localStorage.removeItem(`test_time_${studentTestUuid}`);
+            
+            // Update toast to success
+            toast.success('Your test has been submitted successfully! 🎉', {
+              id: submitToastId,
+              duration: 3000,
+              icon: '✅',
+            });
+            
+            // Add a small delay before navigation to show the success message
+            setTimeout(() => {
+              navigate('/student-dashboard');
+            }, 1000);
+          } catch (error) {
+            console.error('Error submitting test:', error);
+            // Update toast to error
+            toast.error('Failed to submit test. Please try again.', {
+              id: submitToastId,
+              duration: 4000,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleSubmit:', error);
+      toast.error('Something went wrong. Please try again.', {
+        duration: 3000,
+      });
+    }
+  };
+
+  // Add effect to check for pending submission on component mount
+  useEffect(() => {
+    if (studentTestUuid) {
+      const hasPendingSubmission = localStorage.getItem(`test_submission_pending_${studentTestUuid}`) === 'true';
+      setIsPendingSubmission(hasPendingSubmission);
+    }
+  }, [studentTestUuid]);
+
+  // Add effect to check for time expiration on component mount
+  useEffect(() => {
+    if (studentTestUuid) {
+      const isTimeExpired = localStorage.getItem(`test_time_expired_${studentTestUuid}`) === 'true';
+      const hasTestSubmissionPending = localStorage.getItem(`test_submission_pending_${studentTestUuid}`) === 'true';
+      
+      // Set UI state if either condition is true
+      if (isTimeExpired || hasTestSubmissionPending) {
+        setIsPendingSubmission(true);
+        setIsTimeExpired(isTimeExpired);
+      }
+    }
+  }, [studentTestUuid]);
 
   if (loading) {
     return (
@@ -537,8 +881,8 @@ const StudentTestDetails: React.FC = () => {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="p-2 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-50 transition-colors duration-200"
+              disabled={currentPage === 1 || isPendingSubmission}
+              className="p-2 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -547,8 +891,8 @@ const StudentTestDetails: React.FC = () => {
             </span>
             <button
               onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="p-2 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-50 transition-colors duration-200"
+              disabled={currentPage === totalPages || isPendingSubmission}
+              className="p-2 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
@@ -556,9 +900,14 @@ const StudentTestDetails: React.FC = () => {
           {sectionIndex === test.sections.length - 1 && (
             <button
               onClick={handleSubmit}
-              className="px-6 py-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-medium rounded-full hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 shadow-lg"
+              disabled={isPendingSubmission}
+              className={`px-6 py-2 font-medium rounded-full transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 shadow-lg ${
+                isPendingSubmission
+                  ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 focus:ring-indigo-500'
+              }`}
             >
-              Submit Answers
+              {isPendingSubmission ? 'Test Pending Submission...' : 'Submit Test'}
             </button>
           )}
         </div>
@@ -590,6 +939,8 @@ const StudentTestDetails: React.FC = () => {
             <div className={`inline-block rounded-lg border transition-colors duration-200 ${
               isSubmitting 
                 ? 'border-yellow-300 dark:border-yellow-700' 
+                : isPendingSubmission
+                ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800'
                 : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
             } bg-white dark:bg-gray-900`}>
               <input
@@ -602,9 +953,11 @@ const StudentTestDetails: React.FC = () => {
                 value={answers[question.uuid] || ''}
                 onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(question.uuid, e)}
-                className="w-14 sm:w-16 py-1.5 text-lg sm:text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600"
+                className={`w-14 sm:w-16 py-1.5 text-lg sm:text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600 ${
+                  isPendingSubmission ? 'cursor-not-allowed text-gray-500 dark:text-gray-400' : ''
+                }`}
                 placeholder="?"
-                disabled={!testStarted}
+                disabled={!testStarted || isPendingSubmission}
               />
             </div>
           </td>
@@ -632,7 +985,9 @@ const StudentTestDetails: React.FC = () => {
           </div>
         </div>
       )}
-
+      
+      {renderOfflineIndicator()}
+      
       <div className="p-4 sm:p-6 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 min-h-screen">
         <div className="max-w-full mx-auto">
           <button

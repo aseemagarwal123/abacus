@@ -218,6 +218,24 @@ const StudentTestResult: React.FC = () => {
           </div>
 
           {/* Overall Score */}
+          {/* <div className="px-6 pb-6">
+            <div className="bg-gradient-to-br from-indigo-50 to-pink-50 dark:from-indigo-900/30 dark:to-pink-900/30 rounded-xl p-6 border border-indigo-200 dark:border-indigo-800">
+              <div className="flex items-center justify-center space-x-4">
+                <Award className="w-12 h-12 text-indigo-500" />
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">
+                    Accuracy %
+                  </h2>
+                  <div className="flex items-center justify-center space-x-2">
+                    <span className={`text-4xl font-bold ${getGradeColor(result.accuracy_percentage)}`}>
+                      {result.accuracy_percentage.toFixed(1)}%
+                    </span>
+                    <span className="text-4xl">{getGradeEmoji(result.accuracy_percentage)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div> */}
           <div className="px-6 pb-6">
             <div className="bg-gradient-to-br from-indigo-50 to-pink-50 dark:from-indigo-900/30 dark:to-pink-900/30 rounded-xl p-6 border border-indigo-200 dark:border-indigo-800">
               <div className="flex items-center justify-center space-x-4">
@@ -227,10 +245,10 @@ const StudentTestResult: React.FC = () => {
                     Overall Score
                   </h2>
                   <div className="flex items-center justify-center space-x-2">
-                    <span className={`text-4xl font-bold ${getGradeColor(result.accuracy_percentage)}`}>
-                      {result.accuracy_percentage.toFixed(1)}%
+                    <span className={`text-4xl font-bold ${getGradeColor(((result.marks_obtained/result.total_marks)*(100)))}`}>
+                      {((result.marks_obtained/result.total_marks)*(100)).toFixed(1)}%
                     </span>
-                    <span className="text-4xl">{getGradeEmoji(result.accuracy_percentage)}</span>
+                    <span className="text-4xl">{getGradeEmoji(((result.marks_obtained/result.total_marks)*(100)))}</span>
                   </div>
                 </div>
               </div>
