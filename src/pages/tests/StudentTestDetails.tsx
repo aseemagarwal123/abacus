@@ -979,10 +979,10 @@ const StudentTestDetails: React.FC = () => {
             <button
               onClick={handleSubmit}
               disabled={isPendingSubmission}
-              className={`px-6 py-2 font-medium rounded-full transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 shadow-lg ${
+              className={`px-6 py-2 font-medium rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-900 shadow-md ${
                 isPendingSubmission
                   ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 focus:ring-indigo-500'
+                  : 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 focus:ring-blue-500'
               }`}
             >
               {isPendingSubmission ? 'Test Pending Submission...' : 'Submit Test'}
@@ -1109,7 +1109,7 @@ const StudentTestDetails: React.FC = () => {
                   </p>
                   <button
                     onClick={handleBeginTest}
-                    className="px-8 py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-medium rounded-full hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 transform hover:-translate-y-0.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 shadow-lg"
+                    className="px-8 py-3 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50 font-medium rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900 shadow-md"
                   >
                     Begin Test
                   </button>
