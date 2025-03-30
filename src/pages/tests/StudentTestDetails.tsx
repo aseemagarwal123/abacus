@@ -327,26 +327,23 @@ const StudentTestDetails: React.FC = () => {
   };
 
   // Function to get pending submissions from localStorage
-  const getPendingSubmissions = useCallback((testUuid?: string) => {
-    const uuid = testUuid || studentTestUuid;
-    if (!uuid) return [];
+  const getPendingSubmissions = useCallback((testUuid: string) => {
     try {
-      const saved = localStorage.getItem(`pending_submissions_${uuid}`);
-      console.log('Retrieved pending submissions from localStorage for UUID:', uuid, 'Data:', saved);
+      const saved = localStorage.getItem(`pending_submissions_${testUuid}`);
+      console.log('Retrieved pending submissions from localStorage for UUID:', testUuid, 'Data:', saved);
       return saved ? JSON.parse(saved) : [];
     } catch (error) {
       console.error('Error getting pending submissions:', error);
       return [];
     }
-  }, [studentTestUuid]);
+  }, []);
 
   // Function to save pending submission to localStorage
-  const savePendingSubmission = useCallback((submission: { questionUuid: string; answer: string; timestamp: number }) => {
-    if (!studentTestUuid) return;
-    const currentSubmissions = getPendingSubmissions();
+  const savePendingSubmission = useCallback((testUuid: string, submission: { questionUuid: string; answer: string; timestamp: number }) => {
+    const currentSubmissions = getPendingSubmissions(testUuid);
     const updatedSubmissions = [...currentSubmissions, submission];
-    localStorage.setItem(`pending_submissions_${studentTestUuid}`, JSON.stringify(updatedSubmissions));
-  }, [studentTestUuid, getPendingSubmissions]);
+    localStorage.setItem(`pending_submissions_${testUuid}`, JSON.stringify(updatedSubmissions));
+  }, [getPendingSubmissions]);
 
   // Function to clear pending submissions from localStorage
   const clearPendingSubmissions = useCallback(() => {
@@ -361,117 +358,113 @@ const StudentTestDetails: React.FC = () => {
       setIsOnline(true);
       setIsOfflineMode(false);
       
-      // Wait for state to be updated
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Get the UUID from localStorage first
+      const savedTestState = localStorage.getItem(`test_state_${id}`);
+      if (!savedTestState) {
+          console.log('No saved test state found');
+          return;
+      }
       
-      toast.success('You are back online!', {
-        duration: 2000,
-        icon: <Wifi className="w-5 h-5 text-green-500" />,
-      });
-      
-      // Force update isOnline in the closure
-      const forceSync = async () => {
-        console.log('Force syncing with online status:', true);
-        try {
-          // First check for pending submissions
-          const pendingSubmissions = getPendingSubmissions();
-          console.log('Retrieved pending submissions:', pendingSubmissions);
-
-          if (pendingSubmissions.length > 0) {
-            // Show loading toast for sync process
-            const syncToastId = toast.loading('Syncing your offline answers...', {
-              icon: '🔄',
-            });
-
-            try {
-              // First sync all pending answers
-              for (const submission of pendingSubmissions) {
-                console.log('Attempting to submit answer:', submission);
-                await testApi.submitAnswer(
-                  studentTestUuid!,
-                  submission.questionUuid,
-                  submission.answer
-                );
-                console.log('Successfully submitted answer:', submission.questionUuid);
-              }
-              
-              clearPendingSubmissions();
-              setLastSyncTime(Date.now());
-              
-              // Update sync toast to success
-              toast.success('All offline answers have been synced!', {
-                id: syncToastId,
-                duration: 3000,
-                icon: <Wifi className="w-5 h-5 text-green-500" />,
-              });
-            } catch (error) {
-              console.error('Error syncing answers:', error);
-              // Update sync toast to error if sync fails
-              toast.error('Failed to sync some answers. Please try again.', {
-                id: syncToastId,
-                duration: 4000,
-              });
-              throw error; // Propagate error to outer catch block
-            }
+      try {
+          const { student_test_uuid } = JSON.parse(savedTestState);
+          if (!student_test_uuid) {
+              console.log('No student test UUID found in saved state');
+              return;
           }
-
-          // Check for either time expiration or manual submission
-          const isTimeExpired = localStorage.getItem(`test_time_expired_${studentTestUuid}`);
-          const hasTestSubmissionPending = localStorage.getItem(`test_submission_pending_${studentTestUuid}`);
           
-          console.log('Checking submission conditions:', {
-            isTimeExpired: isTimeExpired === 'true',
-            hasTestSubmissionPending: hasTestSubmissionPending === 'true'
+          console.log('Found test UUID for sync:', student_test_uuid);
+          
+          toast.success('You are back online!', {
+              duration: 2000,
+              icon: <Wifi className="w-5 h-5 text-green-500" />,
           });
           
-          // Submit if either time expired or manual submission pending
-          if (isTimeExpired === 'true' || hasTestSubmissionPending === 'true') {
-            // Show loading toast for test submission
-            const submitToastId = toast.loading(
-              isTimeExpired === 'true' 
-                ? 'Submitting your expired test...'
-                : 'Submitting your test...',
-              { icon: '📝' }
-            );
+          // Force sync with the retrieved UUID
+          const forceSync = async () => {
+              try {
+                  // First check for pending submissions using the UUID from localStorage
+                  const pendingSubmissions = getPendingSubmissions(student_test_uuid);
+                  console.log('Retrieved pending submissions for UUID:', student_test_uuid, pendingSubmissions);
 
-            try {
-              console.log('Submitting test due to:', isTimeExpired === 'true' ? 'time expiration' : 'manual submission');
-              await testApi.submitStudentTest(studentTestUuid!);
-              
-              // Clean up ALL localStorage items
-              if (id) {
-                localStorage.removeItem(`test_state_${id}`);
+                  if (pendingSubmissions.length > 0) {
+                      const syncToastId = toast.loading('Syncing your offline answers...', {
+                          icon: '🔄',
+                      });
+
+                      try {
+                          for (const submission of pendingSubmissions) {
+                              console.log('Syncing answer:', submission);
+                              await testApi.submitAnswer(
+                                  student_test_uuid,
+                                  submission.questionUuid,
+                                  submission.answer
+                              );
+                              console.log('Successfully synced answer:', submission.questionUuid);
+                          }
+                          
+                          localStorage.removeItem(`pending_submissions_${student_test_uuid}`);
+                          console.log('Cleared pending submissions from localStorage');
+                          
+                          toast.success('All offline answers have been synced!', {
+                              id: syncToastId,
+                              duration: 2000,
+                              icon: <Wifi className="w-5 h-5 text-green-500" />,
+                          });
+                      } catch (error) {
+                          console.error('Error syncing answers:', error);
+                          toast.error('Failed to sync some answers. Please try again.', {
+                              id: syncToastId,
+                              duration: 4000,
+                          });
+                      }
+                  }
+
+                  // Check if test needs to be submitted
+                  const isTimeExpired = localStorage.getItem(`test_time_expired_${student_test_uuid}`);
+                  const hasTestSubmissionPending = localStorage.getItem(`test_submission_pending_${student_test_uuid}`);
+                  
+                  if (isTimeExpired === 'true' || hasTestSubmissionPending === 'true') {
+                      const submitToastId = toast.loading(
+                          isTimeExpired === 'true' 
+                              ? 'Submitting your expired test...'
+                              : 'Submitting your test...',
+                          { icon: '📝' }
+                      );
+
+                      try {
+                          await testApi.submitStudentTest(student_test_uuid);
+                          
+                          // Clean up ALL localStorage items
+                          localStorage.removeItem(`test_state_${id}`);
+                          localStorage.removeItem(`test_time_${student_test_uuid}`);
+                          localStorage.removeItem(`test_time_expired_${student_test_uuid}`);
+                          localStorage.removeItem(`test_submission_pending_${student_test_uuid}`);
+                          localStorage.removeItem(`pending_submissions_${student_test_uuid}`);
+                          
+                          toast.success('Your test has been submitted successfully!', {
+                              id: submitToastId,
+                              duration: 3000,
+                              icon: '✅',
+                          });
+                          navigate('/student-dashboard');
+                      } catch (error) {
+                          console.error('Error submitting test:', error);
+                          toast.error('Failed to submit test. Please try again.', {
+                              id: submitToastId,
+                              duration: 4000,
+                          });
+                      }
+                  }
+              } catch (error) {
+                  console.error('Error during forced sync:', error);
               }
-              localStorage.removeItem(`test_time_${studentTestUuid}`);
-              localStorage.removeItem(`test_time_expired_${studentTestUuid}`);
-              localStorage.removeItem(`test_submission_pending_${studentTestUuid}`);
-              localStorage.removeItem(`pending_submissions_${studentTestUuid}`);
-              console.log('Test submitted and localStorage cleaned up');
-              
-              // Update submit toast to success
-              toast.success('Your test has been submitted successfully!', {
-                id: submitToastId,
-                duration: 3000,
-                icon: '✅',
-              });
-              navigate('/student-dashboard');
-            } catch (error) {
-              console.error('Error submitting test:', error);
-              // Update submit toast to error if submission fails
-              toast.error('Failed to submit test. Please try again.', {
-                id: submitToastId,
-                duration: 4000,
-              });
-              throw error;
-            }
-          }
-        } catch (error) {
-          console.error('Error during forced sync:', error);
-        }
-      };
+          };
 
-      // Add a small delay and then force sync
-      setTimeout(forceSync, 500);
+          // Add a small delay and then force sync
+          setTimeout(forceSync, 500);
+      } catch (error) {
+          console.error('Error parsing saved test state:', error);
+      }
     };
 
     const handleOffline = () => {
@@ -484,11 +477,6 @@ const StudentTestDetails: React.FC = () => {
       });
     };
 
-    // Initial check for online status
-    console.log('Initial online status:', navigator.onLine);
-    setIsOnline(navigator.onLine);
-    setIsOfflineMode(!navigator.onLine);
-
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
@@ -496,7 +484,7 @@ const StudentTestDetails: React.FC = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [studentTestUuid, getPendingSubmissions, clearPendingSubmissions]);
+  }, [id, navigate, getPendingSubmissions]);
 
   // Update the periodic check effect to handle different statuses
   useEffect(() => {
@@ -737,7 +725,7 @@ const StudentTestDetails: React.FC = () => {
         
         if (!isOnline) {
           // Store answer in localStorage if offline
-          savePendingSubmission({
+          savePendingSubmission(studentTestUuid, {
             questionUuid,
             answer: answerText,
             timestamp: Date.now(),
@@ -776,7 +764,7 @@ const StudentTestDetails: React.FC = () => {
         setSubmittingQuestionId(null);
       }
     }, 1000),
-    [findNextQuestionInfo, currentPage, isOnline, savePendingSubmission]
+    [isOnline, savePendingSubmission]
   );
 
   // Update the handleSubmit function to handle offline submission
@@ -785,12 +773,12 @@ const StudentTestDetails: React.FC = () => {
       if (studentTestUuid && testStarted) {
         if (!isOnline) {
           // Get only the offline answers from pending submissions
-          const pendingSubmissions = getPendingSubmissions();
+          const pendingSubmissions = getPendingSubmissions(studentTestUuid);
           console.log('Saving offline answers as pending submissions:', pendingSubmissions);
           
           // Store submission intent locally
           localStorage.setItem(`test_submission_pending_${studentTestUuid}`, 'true');
-          setIsPendingSubmission(true); // Set this first to disable inputs
+          setIsPendingSubmission(true);
           toast('Your test will be submitted automatically when you are back online.', {
             duration: 4000,
             icon: <WifiOff className="w-5 h-5 text-yellow-500" />,
@@ -802,7 +790,7 @@ const StudentTestDetails: React.FC = () => {
           });
 
           try {
-            setIsPendingSubmission(true); // Set this first to disable inputs
+            setIsPendingSubmission(true);
             await testApi.submitStudentTest(studentTestUuid);
             
             // Clean up ALL localStorage items
@@ -827,8 +815,7 @@ const StudentTestDetails: React.FC = () => {
             }, 1000);
           } catch (error) {
             console.error('Error submitting test:', error);
-            setIsPendingSubmission(false); // Reset on error
-            // Update toast to error
+            setIsPendingSubmission(false);
             toast.error('Failed to submit test. Please try again.', {
               id: submitToastId,
               duration: 4000,
@@ -838,7 +825,7 @@ const StudentTestDetails: React.FC = () => {
       }
     } catch (error) {
       console.error('Error in handleSubmit:', error);
-      setIsPendingSubmission(false); // Reset on error
+      setIsPendingSubmission(false);
       toast.error('Something went wrong. Please try again.', {
         duration: 3000,
       });
