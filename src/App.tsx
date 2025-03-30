@@ -22,6 +22,8 @@ import AdminTestDetails from './pages/tests/AdminTestDetails';
 import StudentTestDetails from './pages/tests/StudentTestDetails';
 import StudentTestList from './pages/tests/StudentTestList';
 import StudentTestResult from './pages/tests/StudentTestResult';
+import NotificationsList from './pages/notifications/NotificationsList';
+import StudentNotifications from './pages/notifications/StudentNotifications';
 import { Toaster } from 'react-hot-toast';
 import { useSelector } from 'react-redux';
 import { RootState } from './store/store';
@@ -51,6 +53,8 @@ const AppRoutes = () => {
             <Route path="/students/new" element={<StudentForm />} />
             <Route path="/students/:id/edit" element={<StudentForm />} />
             <Route path="/logs" element={<ActivityLogs />} />
+            <Route path="/notifications" element={<NotificationsList />} />
+            <Route path="/student-notifications" element={<StudentNotifications />} />
             
             {/* Test Routes based on user type */}
             <Route 

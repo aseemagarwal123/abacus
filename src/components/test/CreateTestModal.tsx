@@ -16,6 +16,7 @@ const CreateTestModal: React.FC<CreateTestModalProps> = ({ isOpen, onClose, onSu
   const [title, setTitle] = useState('');
   const [levelId, setLevelId] = useState('');
   const [sectionType, setSectionType] = useState('');
+  const [dueDate, setDueDate] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [levels, setLevels] = useState<Level[]>([]);
@@ -73,6 +74,9 @@ const CreateTestModal: React.FC<CreateTestModalProps> = ({ isOpen, onClose, onSu
       formData.append('title', title);
       formData.append('level_id', levelId);
       formData.append('section_type', sectionType);
+      if (dueDate) {
+        formData.append('due_date', dueDate);
+      }
 
       await testApi.uploadTest(formData);
       onSuccess();
@@ -103,6 +107,19 @@ const CreateTestModal: React.FC<CreateTestModalProps> = ({ isOpen, onClose, onSu
                 className="mt-1 block w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 transition-colors duration-200"
                 placeholder="Enter test title"
                 required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Due Date (Optional)
+              </label>
+              <input
+                type="datetime-local"
+                id="dueDate"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="mt-1 block w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 transition-colors duration-200"
               />
             </div>
 

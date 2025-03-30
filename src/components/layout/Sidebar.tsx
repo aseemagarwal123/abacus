@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../../store/store';
@@ -12,8 +12,10 @@ import {
   Home,
   Activity,
   BarChart,
-  X
+  X,
+  Bell
 } from 'lucide-react';
+import PostNotificationModal from '../notifications/PostNotificationModal';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -23,6 +25,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const dispatch = useDispatch();
   const user = useSelector((state: RootState) => state.auth.user);
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -36,6 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           { to: '/dashboard', icon: Home, label: 'Dashboard' },
           { to: '/centres', icon: Users, label: 'Centres' },
           { to: '/tests', icon: ClipboardList, label: 'Tests' },
+          { to: '/notifications', icon: Bell, label: 'Notifications' },
           // { to: '/logs', icon: Activity, label: 'Activity Logs' },
           // { to: '/settings', icon: Settings, label: 'Settings' }
         ];
@@ -50,6 +54,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         return [
           { to: '/student-dashboard', icon: Home, label: 'Dashboard' },
           { to: '/tests', icon: ClipboardList, label: 'My Tests' },
+          { to: '/student-notifications', icon: Bell, label: 'Messages' },
           // { to: '/progress', icon: Activity, label: 'Progress' },
           // { to: '/settings', icon: Settings, label: 'Settings' }
         ];
@@ -128,6 +133,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
       </aside>
+
+      {/* Notification Modal */}
+      <PostNotificationModal
+        isOpen={isNotificationModalOpen}
+        onClose={() => setIsNotificationModalOpen(false)}
+        onSuccess={() => {
+          // You can add a success toast here if needed
+          setIsNotificationModalOpen(false);
+        }}
+      />
     </>
   );
 };
