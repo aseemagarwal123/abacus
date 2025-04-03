@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { RootState } from '../../store/store';
@@ -10,22 +10,89 @@ import {
   ChevronRight,
   Trophy,
   Target,
-  Clock
+  Clock,
+  Bell,
+  ChevronDown,
+  ChevronUp,
+  MessageCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTests } from '../../hooks/useTests';
+import { getApiUrl } from '../../config/api';
+
+interface Notification {
+  uuid: string;
+  title: string;
+  message: string;
+  created_at: string;
+}
 
 const StudentDashboard: React.FC = () => {
   const navigate = useNavigate();
   const userData = useSelector((state: RootState) => state.auth.userData);
   const tests = useSelector((state: RootState) => state.test.tests);
-  const { isLoading } = useTests();
+  const { isLoading: isTestsLoading } = useTests();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
+  const [expandedIds, setExpandedIds] = useState<string[]>([]);
 
   if (!userData) return null;
 
   const availableTests = tests.filter(test => 
     String(test.level_uuid) === userData.current_level
   );
+
+  const fetchNotifications = async () => {
+    try {
+      setIsLoadingNotifications(true);
+      const response = await fetch(getApiUrl('notifications/'), {
+        headers: {
+          'Authorization': `Token ${localStorage.getItem('token')}`
+        }
+      });
+      if (!response.ok) throw new Error('Failed to fetch notifications');
+      const data = await response.json();
+      setNotifications(data);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setIsLoadingNotifications(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(diffTime / (1000 * 60));
+
+    if (diffMinutes < 60) {
+      return `${diffMinutes} minutes ago`;
+    } else if (diffHours < 24) {
+      return `${diffHours} hours ago`;
+    } else if (diffDays === 1) {
+      return 'Yesterday';
+    } else {
+      return date.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric'
+      });
+    }
+  };
+
+  const toggleExpand = (uuid: string) => {
+    setExpandedIds(prev => 
+      prev.includes(uuid) 
+        ? prev.filter(id => id !== uuid)
+        : [...prev, uuid]
+    );
+  };
 
   const stats = [
     {
@@ -81,6 +148,82 @@ const StudentDashboard: React.FC = () => {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Notifications Section */}
+      <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
+              <Bell className="w-6 h-6 text-primary-600 dark:text-primary-400" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Recent Messages</h2>
+          </div>
+          {notifications.length > 0 && (
+            <div className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 text-sm rounded-full">
+              {notifications.length} Messages
+            </div>
+          )}
+        </div>
+        <div className="h-[120px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
+          {isLoadingNotifications ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="text-center h-full flex flex-col items-center justify-center">
+              <MessageCircle className="w-12 h-12 text-gray-400 mb-3" />
+              <p className="text-gray-500 dark:text-gray-400">No messages yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4 px-1">
+              {notifications.map((notification) => {
+                const isExpanded = expandedIds.includes(notification.uuid);
+                return (
+                  <div
+                    key={notification.uuid}
+                    className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors duration-200 min-h-[100px]"
+                    onClick={() => toggleExpand(notification.uuid)}
+                  >
+                    <div className="flex items-start space-x-3">
+                      <div className="flex-shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+                          <MessageCircle className="w-4 h-4 text-blue-500" />
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between">
+                          <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1">
+                            {notification.title}
+                          </h3>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 whitespace-nowrap">
+                            {formatDate(notification.created_at)}
+                          </span>
+                        </div>
+                        <p className={`text-sm text-gray-600 dark:text-gray-300 ${!isExpanded ? 'line-clamp-2' : ''}`}>
+                          {notification.message}
+                        </p>
+                        <button className="mt-2 flex items-center text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors duration-200">
+                          {isExpanded ? (
+                            <>
+                              <ChevronUp className="w-4 h-4 mr-1" />
+                              <span className="text-sm">Show Less</span>
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="w-4 h-4 mr-1" />
+                              <span className="text-sm">Read More</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Quick Tips Section */}
