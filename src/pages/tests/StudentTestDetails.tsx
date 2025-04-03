@@ -8,6 +8,7 @@ import { testApi } from '../../services/api/test';
 import { Question, Test } from '../../types';
 import debounce from 'lodash/debounce';
 import { toast } from 'react-hot-toast';
+import { Tab } from '@headlessui/react';
 
 const StudentTestDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +38,7 @@ const StudentTestDetails: React.FC = () => {
   const [isTimeExpired, setIsTimeExpired] = useState(false);
   const [pendingTestSubmission, setPendingTestSubmission] = useState(false);
   const [isPendingSubmission, setIsPendingSubmission] = useState(false);
+  const [sectionPages, setSectionPages] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const handleResize = () => {
@@ -69,6 +71,18 @@ const StudentTestDetails: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, [test]);
 
+  // Add cleanup helper function
+  const cleanupTestStorage = useCallback((testId: string, studentTestUuid: string) => {
+    console.log('Cleaning up test storage...', { testId, studentTestUuid });
+    // Clean up ALL localStorage items related to the test
+    localStorage.removeItem(`test_state_${testId}`);
+    localStorage.removeItem(`test_time_${studentTestUuid}`);
+    localStorage.removeItem(`test_time_expired_${studentTestUuid}`);
+    localStorage.removeItem(`test_submission_pending_${studentTestUuid}`);
+    localStorage.removeItem(`pending_submissions_${studentTestUuid}`);
+  }, []);
+
+  // Update handleTimeUp to use cleanup function
   const handleTimeUp = useCallback(async () => {
     setShowTimeUpModal(true);
     await new Promise(resolve => setTimeout(resolve, 4000));
@@ -77,7 +91,7 @@ const StudentTestDetails: React.FC = () => {
     if (!isOnline) {
       // Store time expiration state
       setIsTimeExpired(true);
-      setIsPendingSubmission(true); // Also set pending submission to lock the UI
+      setIsPendingSubmission(true);
       localStorage.setItem(`test_time_expired_${studentTestUuid}`, 'true');
       toast('Time is up! Your test will be submitted when you are back online.', {
         duration: 4000,
@@ -85,20 +99,13 @@ const StudentTestDetails: React.FC = () => {
       });
     } else {
       // Submit test immediately if online
-      if (studentTestUuid) {
+      if (studentTestUuid && id) {
         await testApi.submitStudentTest(studentTestUuid);
-        // Clean up ALL localStorage items
-        if (id) {
-          localStorage.removeItem(`test_state_${id}`);
-        }
-        localStorage.removeItem(`test_time_${studentTestUuid}`);
-        localStorage.removeItem(`test_time_expired_${studentTestUuid}`);
-        localStorage.removeItem(`test_submission_pending_${studentTestUuid}`);
-        localStorage.removeItem(`pending_submissions_${studentTestUuid}`);
+        cleanupTestStorage(id, studentTestUuid);
         navigate('/student-dashboard');
       }
     }
-  }, [studentTestUuid, id, navigate, isOnline]);
+  }, [studentTestUuid, id, navigate, isOnline, cleanupTestStorage]);
 
   const initializeTest = async () => {
     if (initializedRef.current || !id) return;
@@ -109,33 +116,68 @@ const StudentTestDetails: React.FC = () => {
       
       console.log('Initializing test with ID:', id);
 
-      // First fetch test details
-      const testData = await testApi.getTestDetails(id);
+      // First try to get test details from localStorage if offline
+      const savedTestState = localStorage.getItem(`test_state_${id}`);
+      let testData;
+      
+      if (!navigator.onLine && savedTestState) {
+        const state = JSON.parse(savedTestState);
+        if (state.test_data) {
+          testData = { test: state.test_data };
+          setIsOfflineMode(true);
+          console.log('Using saved test data from localStorage');
+          
+          // Restore section pages if available
+          if (state.section_pages) {
+            setSectionPages(state.section_pages);
+          }
+        }
+      }
+      
+      if (!testData) {
+        // Fetch test details from API if online or no saved data
+        testData = await testApi.getTestDetails(id);
+      }
+      
       console.log('Test details received:', testData);
       
       const testDetails = testData.test || testData;
       setTest(testDetails);
       setRemainingTime(testDetails.duration_minutes * 60);
 
-      const savedTestState = localStorage.getItem(`test_state_${id}`);
-      
       if (savedTestState) {
-        const { student_test_uuid, remaining_time } = JSON.parse(savedTestState);
-        console.log('Found saved test state:', { student_test_uuid, remaining_time });
+        const { student_test_uuid, remaining_time, current_section, section_pages } = JSON.parse(savedTestState);
+        console.log('Found saved test state:', { student_test_uuid, remaining_time, current_section, section_pages });
         
+        // Restore section pages if available
+        if (section_pages) {
+          setSectionPages(section_pages);
+        }
+
         // Check if test was submitted offline or expired offline
         const wasSubmittedOffline = localStorage.getItem(`test_submission_pending_${student_test_uuid}`) === 'true';
         const wasExpiredOffline = localStorage.getItem(`test_time_expired_${student_test_uuid}`) === 'true';
         
         // Get pending submissions using the student_test_uuid from saved state
         const pendingSubmissions = getPendingSubmissions(student_test_uuid);
-        console.log('Test status:', { 
-          wasSubmittedOffline, 
-          wasExpiredOffline,
-          pendingSubmissionsCount: pendingSubmissions.length,
-          pendingSubmissions,
-          student_test_uuid 
-        });
+
+        if (!navigator.onLine) {
+          // Handle offline state
+          setStudentTestUuid(student_test_uuid);
+          setTestStarted(true);
+          setCurrentSection(current_section || 0);
+          setRemainingTime(remaining_time);
+          setIsOfflineMode(true);
+          
+          // Load saved answers
+          const savedAnswers = pendingSubmissions.reduce((acc: Record<string, string>, submission: { questionUuid: string; answer: string }) => ({
+            ...acc,
+            [submission.questionUuid]: submission.answer
+          }), {});
+          setAnswers(savedAnswers);
+          
+          return;
+        }
 
         try {
           const durationData = await testApi.getRemainingDuration(student_test_uuid);
@@ -245,9 +287,11 @@ const StudentTestDetails: React.FC = () => {
             // Normal test continuation
             setTestStarted(true);
             setRemainingTime(durationData.remaining_duration);
+            setCurrentSection(current_section || 0); // Set the current section from saved state
             localStorage.setItem(`test_state_${id}`, JSON.stringify({
               student_test_uuid,
-              remaining_time: durationData.remaining_duration
+              remaining_time: durationData.remaining_duration,
+              current_section: current_section || 0
             }));
 
             try {
@@ -275,14 +319,25 @@ const StudentTestDetails: React.FC = () => {
           }
         } catch (error) {
           console.error('Error fetching remaining duration:', error);
-          localStorage.removeItem(`test_state_${id}`);
+          if (!navigator.onLine) {
+            // If offline, use saved state
+            setStudentTestUuid(student_test_uuid);
+            setTestStarted(true);
+            setCurrentSection(current_section || 0);
+            setRemainingTime(remaining_time);
+            setIsOfflineMode(true);
+          } else {
+            localStorage.removeItem(`test_state_${id}`);
+          }
         }
       }
       
     } catch (error) {
       console.error('Error initializing test:', error);
       initializedRef.current = false;
-      alert('Failed to initialize test. Please try again.');
+      if (navigator.onLine) {
+        alert('Failed to initialize test. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -351,119 +406,113 @@ const StudentTestDetails: React.FC = () => {
     localStorage.removeItem(`pending_submissions_${studentTestUuid}`);
   }, [studentTestUuid]);
 
-  // Online/Offline detection
+  // Update online/offline effect to use cleanup function
   useEffect(() => {
     const handleOnline = async () => {
       console.log('Online event detected');
       setIsOnline(true);
       setIsOfflineMode(false);
       
-      // Get the UUID from localStorage first
       const savedTestState = localStorage.getItem(`test_state_${id}`);
       if (!savedTestState) {
-          console.log('No saved test state found');
-          return;
+        console.log('No saved test state found');
+        return;
       }
       
       try {
-          const { student_test_uuid } = JSON.parse(savedTestState);
-          if (!student_test_uuid) {
-              console.log('No student test UUID found in saved state');
-              return;
-          }
-          
-          console.log('Found test UUID for sync:', student_test_uuid);
-          
-          toast.success('You are back online!', {
-              duration: 2000,
-              icon: <Wifi className="w-5 h-5 text-green-500" />,
-          });
-          
-          // Force sync with the retrieved UUID
-          const forceSync = async () => {
+        const { student_test_uuid } = JSON.parse(savedTestState);
+        if (!student_test_uuid) {
+          console.log('No student test UUID found in saved state');
+          return;
+        }
+        
+        console.log('Found test UUID for sync:', student_test_uuid);
+        
+        toast.success('You are back online!', {
+          duration: 2000,
+          icon: <Wifi className="w-5 h-5 text-green-500" />,
+        });
+        
+        // Force sync with the retrieved UUID
+        const forceSync = async () => {
+          try {
+            const pendingSubmissions = getPendingSubmissions(student_test_uuid);
+            console.log('Retrieved pending submissions for UUID:', student_test_uuid, pendingSubmissions);
+
+            if (pendingSubmissions.length > 0) {
+              const syncToastId = toast.loading('Syncing your offline answers...', {
+                icon: '🔄',
+              });
+
               try {
-                  // First check for pending submissions using the UUID from localStorage
-                  const pendingSubmissions = getPendingSubmissions(student_test_uuid);
-                  console.log('Retrieved pending submissions for UUID:', student_test_uuid, pendingSubmissions);
-
-                  if (pendingSubmissions.length > 0) {
-                      const syncToastId = toast.loading('Syncing your offline answers...', {
-                          icon: '🔄',
-                      });
-
-                      try {
-                          for (const submission of pendingSubmissions) {
-                              console.log('Syncing answer:', submission);
-                              await testApi.submitAnswer(
-                                  student_test_uuid,
-                                  submission.questionUuid,
-                                  submission.answer
-                              );
-                              console.log('Successfully synced answer:', submission.questionUuid);
-                          }
-                          
-                          localStorage.removeItem(`pending_submissions_${student_test_uuid}`);
-                          console.log('Cleared pending submissions from localStorage');
-                          
-                          toast.success('All offline answers have been synced!', {
-                              id: syncToastId,
-                              duration: 2000,
-                              icon: <Wifi className="w-5 h-5 text-green-500" />,
-                          });
-                      } catch (error) {
-                          console.error('Error syncing answers:', error);
-                          toast.error('Failed to sync some answers. Please try again.', {
-                              id: syncToastId,
-                              duration: 4000,
-                          });
-                      }
-                  }
-
-                  // Check if test needs to be submitted
-                  const isTimeExpired = localStorage.getItem(`test_time_expired_${student_test_uuid}`);
-                  const hasTestSubmissionPending = localStorage.getItem(`test_submission_pending_${student_test_uuid}`);
-                  
-                  if (isTimeExpired === 'true' || hasTestSubmissionPending === 'true') {
-                      const submitToastId = toast.loading(
-                          isTimeExpired === 'true' 
-                              ? 'Submitting your expired test...'
-                              : 'Submitting your test...',
-                          { icon: '📝' }
-                      );
-
-                      try {
-                          await testApi.submitStudentTest(student_test_uuid);
-                          
-                          // Clean up ALL localStorage items
-                          localStorage.removeItem(`test_state_${id}`);
-                          localStorage.removeItem(`test_time_${student_test_uuid}`);
-                          localStorage.removeItem(`test_time_expired_${student_test_uuid}`);
-                          localStorage.removeItem(`test_submission_pending_${student_test_uuid}`);
-                          localStorage.removeItem(`pending_submissions_${student_test_uuid}`);
-                          
-                          toast.success('Your test has been submitted successfully!', {
-                              id: submitToastId,
-                              duration: 3000,
-                              icon: '✅',
-                          });
-                          navigate('/student-dashboard');
-                      } catch (error) {
-                          console.error('Error submitting test:', error);
-                          toast.error('Failed to submit test. Please try again.', {
-                              id: submitToastId,
-                              duration: 4000,
-                          });
-                      }
-                  }
+                for (const submission of pendingSubmissions) {
+                  console.log('Syncing answer:', submission);
+                  await testApi.submitAnswer(
+                    student_test_uuid,
+                    submission.questionUuid,
+                    submission.answer
+                  );
+                  console.log('Successfully synced answer:', submission.questionUuid);
+                }
+                
+                localStorage.removeItem(`pending_submissions_${student_test_uuid}`);
+                console.log('Cleared pending submissions from localStorage');
+                
+                toast.success('All offline answers have been synced!', {
+                  id: syncToastId,
+                  duration: 2000,
+                  icon: <Wifi className="w-5 h-5 text-green-500" />,
+                });
               } catch (error) {
-                  console.error('Error during forced sync:', error);
+                console.error('Error syncing answers:', error);
+                toast.error('Failed to sync some answers. Please try again.', {
+                  id: syncToastId,
+                  duration: 4000,
+                });
               }
-          };
+            }
 
-          // Add a small delay and then force sync
-          setTimeout(forceSync, 500);
+            // Check if test needs to be submitted
+            const isTimeExpired = localStorage.getItem(`test_time_expired_${student_test_uuid}`);
+            const hasTestSubmissionPending = localStorage.getItem(`test_submission_pending_${student_test_uuid}`);
+            
+            if (isTimeExpired === 'true' || hasTestSubmissionPending === 'true') {
+              const submitToastId = toast.loading(
+                isTimeExpired === 'true' 
+                  ? 'Submitting your expired test...'
+                  : 'Submitting your test...',
+                { icon: '📝' }
+              );
+
+              try {
+                await testApi.submitStudentTest(student_test_uuid);
+                
+                if (id) {
+                  cleanupTestStorage(id, student_test_uuid);
+                }
+                
+                toast.success('Your test has been submitted successfully!', {
+                  id: submitToastId,
+                  duration: 3000,
+                  icon: '✅',
+                });
+                navigate('/student-dashboard');
+              } catch (error) {
+                console.error('Error submitting test:', error);
+                toast.error('Failed to submit test. Please try again.', {
+                  id: submitToastId,
+                  duration: 4000,
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error during forced sync:', error);
+          }
+        };
+
+        setTimeout(forceSync, 500);
       } catch (error) {
-          console.error('Error parsing saved test state:', error);
+        console.error('Error parsing saved test state:', error);
       }
     };
 
@@ -484,7 +533,7 @@ const StudentTestDetails: React.FC = () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [id, navigate, getPendingSubmissions]);
+  }, [id, navigate, getPendingSubmissions, cleanupTestStorage]);
 
   // Update the periodic check effect to handle different statuses
   useEffect(() => {
@@ -571,28 +620,33 @@ const StudentTestDetails: React.FC = () => {
     }
   };
 
-  // Function to find the next question UUID and its page
-  const findNextQuestionInfo = useCallback((currentQuestionUuid: string): { uuid: string | null; page: number } => {
-    if (!test) return { uuid: null, page: 1 };
+  // Add helper function to find next question
+  const findNextQuestionInfo = useCallback((currentQuestionUuid: string): { uuid: string | null; sectionIndex: number; page: number } => {
+    if (!test) return { uuid: null, sectionIndex: currentSection, page: 1 };
 
-    let totalQuestions = 0;
     let foundCurrent = false;
+    let totalQuestions = 0;
     
-    for (const section of test.sections) {
-      for (const question of section.questions) {
+    for (let sectionIndex = 0; sectionIndex < test.sections.length; sectionIndex++) {
+      const section = test.sections[sectionIndex];
+      for (let i = 0; i < section.questions.length; i++) {
         if (foundCurrent) {
           // Calculate the page number for the next question
-          const nextPage = Math.floor(totalQuestions / questionsPerPage) + 1;
-          return { uuid: question.uuid, page: nextPage };
+          const nextPage = Math.floor(i / questionsPerPage) + 1;
+          return { 
+            uuid: section.questions[i].uuid, 
+            sectionIndex,
+            page: nextPage 
+          };
         }
-        if (question.uuid === currentQuestionUuid) {
+        if (section.questions[i].uuid === currentQuestionUuid) {
           foundCurrent = true;
         }
         totalQuestions++;
       }
     }
-    return { uuid: null, page: 1 };
-  }, [test, questionsPerPage]);
+    return { uuid: null, sectionIndex: currentSection, page: 1 };
+  }, [test, currentSection, questionsPerPage]);
 
   // Function to find the page number containing a specific question
   const findQuestionPage = useCallback((questionUuid: string) => {
@@ -626,10 +680,10 @@ const StudentTestDetails: React.FC = () => {
     return findQuestionPage(sortedAnswers[0].question_uuid);
   }, [findQuestionPage]);
 
-  // Update the answers fetch logic to set the current page
+  // Update the answers fetch effect
   useEffect(() => {
     const fetchAnswers = async () => {
-      if (!studentTestUuid) return;
+      if (!studentTestUuid || !test) return;
 
       try {
         const answersData = await testApi.getAnswers(studentTestUuid);
@@ -639,9 +693,51 @@ const StudentTestDetails: React.FC = () => {
         }), {});
         setAnswers(savedAnswers);
 
-        // Set the current page to show the most recently answered questions
-        const latestPage = findLatestAnsweredPage(answersData.answers);
-        setCurrentPage(latestPage);
+        if (answersData.answers.length > 0) {
+          // Sort answers by submission time (most recent first)
+          const sortedAnswers = [...answersData.answers].sort((a, b) => 
+            new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+          );
+
+          // Find the section and page of the most recently answered question
+          const lastAnsweredQuestionId = sortedAnswers[0].question_uuid;
+          let foundSection = 0;
+          let foundPage = 1;
+
+          // Find the section index and page number
+          test.sections.forEach((section, sectionIndex) => {
+            const questionIndex = section.questions.findIndex(q => q.uuid === lastAnsweredQuestionId);
+            if (questionIndex !== -1) {
+              foundSection = sectionIndex;
+              foundPage = Math.floor(questionIndex / questionsPerPage) + 1;
+              
+              // Update section pages state
+              setSectionPages(prev => ({
+                ...prev,
+                [section.uuid]: foundPage
+              }));
+            }
+          });
+
+          // Update current section
+          setCurrentSection(foundSection);
+          
+          // Save the state to localStorage
+          if (id) {
+            const savedTestState = localStorage.getItem(`test_state_${id}`);
+            if (savedTestState) {
+              const state = JSON.parse(savedTestState);
+              localStorage.setItem(`test_state_${id}`, JSON.stringify({
+                ...state,
+                current_section: foundSection,
+                section_pages: {
+                  ...state.section_pages,
+                  [test.sections[foundSection].uuid]: foundPage
+                }
+              }));
+            }
+          }
+        }
       } catch (error) {
         console.error('Error fetching saved answers:', error);
       }
@@ -650,7 +746,7 @@ const StudentTestDetails: React.FC = () => {
     if (testStarted || (studentTestUuid && test)) {
       fetchAnswers();
     }
-  }, [studentTestUuid, test, findLatestAnsweredPage, testStarted]);
+  }, [studentTestUuid, test, questionsPerPage, testStarted, id]);
 
   // Update the answer change handler to navigate to the question's page
   const handleAnswerChange = (questionId: string, value: string) => {
@@ -697,24 +793,58 @@ const StudentTestDetails: React.FC = () => {
     return null;
   };
 
-  // Add the handleKeyDown function
+  // Update handleKeyDown to handle page navigation
   const handleKeyDown = useCallback((questionUuid: string, e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      const { uuid: nextQuestionUuid, page: nextPage } = findNextQuestionInfo(questionUuid);
+      const { uuid: nextQuestionUuid, sectionIndex, page: nextPage } = findNextQuestionInfo(questionUuid);
+      
       if (nextQuestionUuid) {
-        if (nextPage !== currentPage) {
-          setCurrentPage(nextPage);
-          setTimeout(() => {
-            if (inputRefs.current[nextQuestionUuid]) {
-              inputRefs.current[nextQuestionUuid].focus();
+        // If next question is in a different section
+        if (sectionIndex !== currentSection) {
+          setCurrentSection(sectionIndex);
+          // Update section pages for the new section
+          setSectionPages(prev => ({
+            ...prev,
+            [test!.sections[sectionIndex].uuid]: nextPage
+          }));
+          
+          // Save state to localStorage
+          if (studentTestUuid && id) {
+            const savedTestState = localStorage.getItem(`test_state_${id}`);
+            if (savedTestState) {
+              const state = JSON.parse(savedTestState);
+              localStorage.setItem(`test_state_${id}`, JSON.stringify({
+                ...state,
+                current_section: sectionIndex,
+                section_pages: {
+                  ...state.section_pages,
+                  [test!.sections[sectionIndex].uuid]: nextPage
+                }
+              }));
             }
-          }, 100);
-        } else if (inputRefs.current[nextQuestionUuid]) {
-          inputRefs.current[nextQuestionUuid].focus();
+          }
+        } else {
+          // If next question is in the same section but different page
+          const currentSectionUuid = test!.sections[currentSection].uuid;
+          const currentSectionPage = sectionPages[currentSectionUuid] || 1;
+          
+          if (nextPage !== currentSectionPage) {
+            setSectionPages(prev => ({
+              ...prev,
+              [currentSectionUuid]: nextPage
+            }));
+          }
         }
+
+        // Focus the next input after a short delay to allow for state updates
+        setTimeout(() => {
+          if (inputRefs.current[nextQuestionUuid]) {
+            inputRefs.current[nextQuestionUuid].focus();
+          }
+        }, 100);
       }
     }
-  }, [findNextQuestionInfo, currentPage]);
+  }, [test, currentSection, sectionPages, findNextQuestionInfo, studentTestUuid, id]);
 
   // Update the answer submission logic to handle offline mode
   const debouncedSubmitAnswer = useCallback(
@@ -730,30 +860,27 @@ const StudentTestDetails: React.FC = () => {
             answer: answerText,
             timestamp: Date.now(),
           });
-          console.log('Answer saved to localStorage for offline sync');
+          
+          // Ensure test data and state is preserved
+          if (test) {
+            const savedTestState = localStorage.getItem(`test_state_${id}`);
+            if (savedTestState) {
+              const state = JSON.parse(savedTestState);
+              localStorage.setItem(`test_state_${id}`, JSON.stringify({
+                ...state,
+                test_data: test,
+                current_section: currentSection,
+                section_pages: sectionPages
+              }));
+            }
+          }
+          
           toast('Answer saved locally. Will sync when online.', {
             duration: 2000,
             icon: <WifiOff className="w-5 h-5 text-yellow-500" />,
           });
         } else {
-          // Submit answer online
           await testApi.submitAnswer(studentTestUuid, questionUuid, answerText);
-          console.log('Answer submitted successfully online');
-        }
-
-        // Find next question info and handle page change
-        const { uuid: nextQuestionUuid, page: nextPage } = findNextQuestionInfo(questionUuid);
-        if (nextQuestionUuid) {
-          if (nextPage !== currentPage) {
-            setCurrentPage(nextPage);
-            setTimeout(() => {
-              if (inputRefs.current[nextQuestionUuid]) {
-                inputRefs.current[nextQuestionUuid].focus();
-              }
-            }, 100);
-          } else if (inputRefs.current[nextQuestionUuid]) {
-            inputRefs.current[nextQuestionUuid].focus();
-          }
         }
       } catch (error) {
         console.error('Error submitting answer:', error);
@@ -764,7 +891,7 @@ const StudentTestDetails: React.FC = () => {
         setSubmittingQuestionId(null);
       }
     }, 1000),
-    [isOnline, savePendingSubmission]
+    [isOnline, savePendingSubmission, test, id, currentSection, sectionPages]
   );
 
   // Update the handleSubmit function to handle offline submission
@@ -793,14 +920,9 @@ const StudentTestDetails: React.FC = () => {
             setIsPendingSubmission(true);
             await testApi.submitStudentTest(studentTestUuid);
             
-            // Clean up ALL localStorage items
             if (id) {
-              localStorage.removeItem(`test_state_${id}`);
+              cleanupTestStorage(id, studentTestUuid);
             }
-            localStorage.removeItem(`test_time_${studentTestUuid}`);
-            localStorage.removeItem(`test_submission_pending_${studentTestUuid}`);
-            localStorage.removeItem(`pending_submissions_${studentTestUuid}`);
-            localStorage.removeItem(`test_time_expired_${studentTestUuid}`);
             
             // Update toast to success
             toast.success('Your test has been submitted successfully! 🎉', {
@@ -933,9 +1055,10 @@ const StudentTestDetails: React.FC = () => {
     );
   }
 
-  const renderPagination = (questions: Question[], sectionIndex: number) => {
+  const renderPagination = (questions: Question[], sectionUuid: string) => {
     const totalPages = Math.ceil(questions.length / questionsPerPage);
-    const startIndex = (currentPage - 1) * questionsPerPage;
+    const currentSectionPage = sectionPages[sectionUuid] || 1;
+    const startIndex = (currentSectionPage - 1) * questionsPerPage;
     const endIndex = startIndex + questionsPerPage;
     const currentQuestions = questions.slice(startIndex, endIndex);
 
@@ -945,24 +1068,30 @@ const StudentTestDetails: React.FC = () => {
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1 || isPendingSubmission}
+              onClick={() => setSectionPages(prev => ({
+                ...prev,
+                [sectionUuid]: Math.max((prev[sectionUuid] || 1) - 1, 1)
+              }))}
+              disabled={currentSectionPage === 1 || isPendingSubmission}
               className="p-2 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
             <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
-              Page {currentPage} of {totalPages}
+              Page {currentSectionPage} of {totalPages}
             </span>
             <button
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages || isPendingSubmission}
+              onClick={() => setSectionPages(prev => ({
+                ...prev,
+                [sectionUuid]: Math.min((prev[sectionUuid] || 1) + 1, totalPages)
+              }))}
+              disabled={currentSectionPage === totalPages || isPendingSubmission}
               className="p-2 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
             >
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
-          {sectionIndex === test.sections.length - 1 && (
+          {sectionUuid === test.sections[test.sections.length - 1].uuid && (
             <button
               onClick={handleSubmit}
               disabled={isPendingSubmission}
@@ -1018,7 +1147,7 @@ const StudentTestDetails: React.FC = () => {
                 value={answers[question.uuid] || ''}
                 onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
                 onKeyDown={(e) => handleKeyDown(question.uuid, e)}
-                className={`w-14 sm:w-16 py-1.5 text-lg sm:text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600 ${
+                className={`[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none w-14 sm:w-16 py-1.5 text-lg sm:text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600 ${
                   isPendingSubmission ? 'cursor-not-allowed text-gray-500 dark:text-gray-400' : ''
                 }`}
                 placeholder="?"
@@ -1102,158 +1231,155 @@ const StudentTestDetails: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                test.sections.map((section, sectionIndex) => {
-                  const { currentQuestions, pagination } = renderPagination(section.questions, sectionIndex);
-                  const isMulDiv = section.section_type === "MUL_DIV";
-                  
-                  if (isMulDiv) {
-                    return (
-                      <div key={section.uuid} className="mb-8 last:mb-0">
-                        <div className="flex items-center mb-6">
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center mr-3 shadow-lg">
-                            <span className="text-lg font-bold text-white">{sectionIndex + 1}</span>
-                          </div>
-                          <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                            Multiplication & Division Fun!
-                          </h2>
-                        </div>
-                        
-                        <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-indigo-100 dark:border-indigo-800">
-                          <table className="w-full border-collapse">
-                            <thead>
-                              <tr className="border-b border-indigo-100 dark:border-indigo-800">
-                                <th className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-left text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
-                                  No.
-                                </th>
-                                <th className="w-20 sm:w-24 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
-                                  First Number
-                                </th>
-                                <th className="w-12 sm:w-16 px-2 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
-                                  Operation
-                                </th>
-                                <th className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
-                                  Second Number
-                                </th>
-                                <th className="w-24 sm:w-28 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20">
-                                  Answer
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-indigo-100/50 dark:divide-indigo-800/50">
-                              {renderMulDivQuestions(currentQuestions)}
-                            </tbody>
-                          </table>
-                        </div>
-                        <div className="mt-6">
-                          {pagination}
-                        </div>
-                      </div>
-                    );
+                <Tab.Group selectedIndex={currentSection} onChange={(index) => {
+                  setCurrentSection(index);
+                  // Save the current section and pages to localStorage
+                  if (studentTestUuid && id) {
+                    const savedTestState = localStorage.getItem(`test_state_${id}`);
+                    if (savedTestState) {
+                      const state = JSON.parse(savedTestState);
+                      localStorage.setItem(`test_state_${id}`, JSON.stringify({
+                        ...state,
+                        current_section: index,
+                        section_pages: sectionPages
+                      }));
+                    }
                   }
-
-                  // For addition sections, keep the existing rendering logic
-                  const maxLength = currentQuestions.reduce((max, question) => {
-                    const numbers = parseQuestionText(question.text);
-                    return Math.max(max, numbers.length);
-                  }, 0);
-
-                  return (
-                    <div key={section.uuid} className="mb-8 last:mb-0">
-                      <div className="flex items-center mb-6">
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center mr-3 shadow-lg">
-                          <span className="text-lg font-bold text-white">{sectionIndex + 1}</span>
-                        </div>
-                        <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                          {section.section_type === 'add' ? 'Addition' : 'Multiplication'} Fun!
-                        </h2>
-                      </div>
+                }}>
+                  <Tab.List className="flex justify-start rounded-xl bg-indigo-100/20 dark:bg-indigo-900/20 p-1 mb-6 space-x-2">
+                    {test.sections.map((section, index) => (
+                      <Tab
+                        key={section.uuid}
+                        className={({ selected }) =>
+                          `px-6 rounded-lg py-2.5 text-sm font-medium leading-5 min-w-[200px]
+                          ${selected
+                            ? 'bg-white dark:bg-gray-800 shadow text-indigo-600 dark:text-indigo-400'
+                            : 'text-gray-600 dark:text-gray-400 hover:bg-white/[0.12] hover:text-indigo-600 dark:hover:text-indigo-400'
+                          } transition-all duration-200`
+                        }
+                      >
+                        {section.section_type === "MUL_DIV" ? "Multiplication & Division" : "Addition"} {index + 1}
+                      </Tab>
+                    ))}
+                  </Tab.List>
+                  <Tab.Panels>
+                    {test.sections.map((section, sectionIndex) => {
+                      const { currentQuestions, pagination } = renderPagination(section.questions, section.uuid);
+                      const isMulDiv = section.section_type === "MUL_DIV";
                       
-                      <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-xl shadow-lg border-2 border-indigo-200 dark:border-indigo-800">
-                        <table className="min-w-full border-collapse">
-                          <thead>
-                            <tr>
-                              <th className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-left text-sm sm:text-base font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
-                                No.
-                              </th>
-                              {currentQuestions.map((question) => (
-                                <th
-                                  key={question.uuid}
-                                  className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-sm sm:text-base font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
-                                >
-                                  Q{question.order}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {Array.from({ length: maxLength }).map((_, rowIndex) => {
-                              const bottomUpIndex = maxLength - rowIndex - 1;
-                              return (
-                                <tr key={rowIndex}>
-                                  <td className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-base sm:text-lg font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
-                                    {rowIndex + 1}
-                                  </td>
-                                  {currentQuestions.map((question) => {
-                                    const numbers = parseQuestionText(question.text);
-                                    return (
-                                      <td
+                      return (
+                        <Tab.Panel key={section.uuid}>
+                          <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-indigo-100 dark:border-indigo-800">
+                            <table className="w-full border-collapse">
+                              <thead>
+                                <tr className="border-b border-indigo-100 dark:border-indigo-800">
+                                  <th className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-left text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+                                    No.
+                                  </th>
+                                  {isMulDiv ? (
+                                    <>
+                                      <th className="w-20 sm:w-24 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
+                                        First Number
+                                      </th>
+                                      <th className="w-12 sm:w-16 px-2 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
+                                        Operation
+                                      </th>
+                                      <th className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
+                                        Second Number
+                                      </th>
+                                      <th className="w-24 sm:w-28 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20">
+                                        Answer
+                                      </th>
+                                    </>
+                                  ) : (
+                                    currentQuestions.map((question) => (
+                                      <th
                                         key={question.uuid}
-                                        className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-base sm:text-lg text-gray-900 dark:text-white whitespace-nowrap border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
+                                        className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-sm sm:text-base font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
                                       >
-                                        <div className="w-full flex justify-end pr-2 font-mono">
-                                          {numbers[bottomUpIndex] !== undefined ? formatNumber(numbers[bottomUpIndex]) : ''}
-                                        </div>
-                                      </td>
-                                    );
-                                  })}
+                                        Q{question.order}
+                                      </th>
+                                    ))
+                                  )}
                                 </tr>
-                              );
-                            })}
-                            <tr>
-                              <td className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center text-base sm:text-lg font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
-                                Answer
-                              </td>
-                              {currentQuestions.map((question) => (
-                                <td
-                                  key={question.uuid}
-                                  className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
-                                >
-                                  <div className={`inline-block rounded-lg border transition-colors duration-200 ${
-                                    submittingQuestionId === question.uuid 
-                                      ? 'border-yellow-300 dark:border-yellow-700' 
-                                      : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
-                                  } bg-white dark:bg-gray-900`}>
-                                    <input
-                                      ref={el => {
-                                        if (el) {
-                                          inputRefs.current[question.uuid] = el;
-                                        }
-                                      }}
-                                      type="number"
-                                      value={answers[question.uuid] || ''}
-                                      onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
-                                      onKeyDown={(e) => handleKeyDown(question.uuid, e)}
-                                      className="w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono 
-                                        bg-transparent
-                                        rounded-lg focus:outline-none
-                                        dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600
-                                        transition-colors duration-200"
-                                      placeholder="?"
-                                      disabled={!testStarted || isPendingSubmission}
-                                    />
-                                  </div>
-                                </td>
-                              ))}
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                      <div className="mt-6">
-                        {pagination}
-                      </div>
-                    </div>
-                  );
-                })
+                              </thead>
+                              <tbody className="divide-y divide-indigo-100/50 dark:divide-indigo-800/50">
+                                {isMulDiv ? (
+                                  renderMulDivQuestions(currentQuestions)
+                                ) : (
+                                  <>
+                                    {Array.from({ length: Math.max(...currentQuestions.map(q => parseQuestionText(q.text).length)) }).map((_, rowIndex) => {
+                                      const bottomUpIndex = Math.max(...currentQuestions.map(q => parseQuestionText(q.text).length)) - rowIndex - 1;
+                                      return (
+                                        <tr key={rowIndex}>
+                                          <td className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-base sm:text-lg font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+                                            {rowIndex + 1}
+                                          </td>
+                                          {currentQuestions.map((question) => {
+                                            const numbers = parseQuestionText(question.text);
+                                            return (
+                                              <td
+                                                key={question.uuid}
+                                                className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-base sm:text-lg text-gray-900 dark:text-white whitespace-nowrap border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
+                                              >
+                                                <div className="w-full flex justify-end pr-2 font-mono">
+                                                  {numbers[bottomUpIndex] !== undefined ? formatNumber(numbers[bottomUpIndex]) : ''}
+                                                </div>
+                                              </td>
+                                            );
+                                          })}
+                                        </tr>
+                                      );
+                                    })}
+                                    <tr>
+                                      <td className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center text-base sm:text-lg font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+                                        Answer
+                                      </td>
+                                      {currentQuestions.map((question) => (
+                                        <td
+                                          key={question.uuid}
+                                          className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
+                                        >
+                                          <div className={`inline-block rounded-lg border transition-colors duration-200 ${
+                                            submittingQuestionId === question.uuid 
+                                              ? 'border-yellow-300 dark:border-yellow-700' 
+                                              : isPendingSubmission
+                                              ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800'
+                                              : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
+                                          } bg-white dark:bg-gray-900`}>
+                                            <input
+                                              ref={el => {
+                                                if (el) {
+                                                  inputRefs.current[question.uuid] = el;
+                                                }
+                                              }}
+                                              type="number"
+                                              value={answers[question.uuid] || ''}
+                                              onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
+                                              onKeyDown={(e) => handleKeyDown(question.uuid, e)}
+                                              className={`[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600 ${
+                                                isPendingSubmission ? 'cursor-not-allowed text-gray-500 dark:text-gray-400' : ''
+                                              }`}
+                                              placeholder="?"
+                                              disabled={!testStarted || isPendingSubmission}
+                                            />
+                                          </div>
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  </>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="mt-6">
+                            {pagination}
+                          </div>
+                        </Tab.Panel>
+                      );
+                    })}
+                  </Tab.Panels>
+                </Tab.Group>
               )}
             </div>
           </div>
