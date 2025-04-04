@@ -32,6 +32,7 @@ const StudentTestDetails: React.FC = () => {
   const [isTimeExpired, setIsTimeExpired] = useState(false);
   const [isPendingSubmission, setIsPendingSubmission] = useState(false);
   const [sectionPages, setSectionPages] = useState<Record<string, number>>({});
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -41,22 +42,25 @@ const StudentTestDetails: React.FC = () => {
       if (isMulDiv) {
         // Pagination for multiplication/division questions
         if (width < 640) { // mobile
-          setQuestionsPerPage(3);
+          setQuestionsPerPage(4);
+          setIsMobile(true)
         } else if (width < 1024) { // tablet
           setQuestionsPerPage(4);
         } else { // desktop
-          setQuestionsPerPage(6);
+          setQuestionsPerPage(10);
         }
       } else {
-        // Original pagination for addition questions
+        // Updated pagination for addition questions
         if (width < 640) { // mobile
-          setQuestionsPerPage(3);
+          setQuestionsPerPage(4);
+          setIsMobile(true)
         } else if (width < 1024) { // tablet
           setQuestionsPerPage(5);
         } else { // desktop
           setQuestionsPerPage(10); // Ensure 10 questions per page for addition on desktop
         }
       }
+      console.log("isMobile", isMobile);
     };
 
     handleResize(); // Initial call
@@ -997,55 +1001,283 @@ const StudentTestDetails: React.FC = () => {
     };
   };
 
-  const renderMulDivQuestions = (questions: Question[]) => {
-    return questions.map((question) => {
-      const numbers = parseQuestionText(question.text);
-      const operatorSign = question.question_type === 'multiply' ? '×' : '÷';
-      const isSubmitting = submittingQuestionId === question.uuid;
-      
-      return (
-        <tr key={question.uuid} className="border-b border-indigo-100/50 dark:border-indigo-800/50 hover:bg-indigo-50/30 dark:hover:bg-indigo-900/30 transition-colors duration-150">
-          <td className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-center text-base sm:text-lg font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/30 dark:bg-indigo-900/10 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+  const renderMobileView = (questions: Question[], isMulDiv: boolean) => {
+    if (isMulDiv) {
+      return questions.map((question) => (
+        <tr key={question.uuid} className="border-b border-blue-100 dark:border-blue-800">
+          <td className="w-8 px-2 py-3 text-center text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/20">
             {question.order}
           </td>
-          <td className="w-20 sm:w-24 px-2 sm:px-3 py-2.5 text-right text-lg sm:text-xl text-gray-900 dark:text-white whitespace-nowrap border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 font-mono">
-            {numbers[0]}
-          </td>
-          <td className="w-12 sm:w-16 px-2 py-2.5 text-center text-lg sm:text-xl text-indigo-600 dark:text-indigo-400 whitespace-nowrap border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 font-mono">
-            {operatorSign}
-          </td>
-          <td className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-left text-lg sm:text-xl text-gray-900 dark:text-white whitespace-nowrap border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 font-mono">
-            {numbers[1]}
-          </td>
-          <td className="w-24 sm:w-28 px-2 sm:px-3 py-2.5 text-center">
-            <div className={`inline-block rounded-lg border transition-colors duration-200 ${
-              isSubmitting 
-                ? 'border-yellow-300 dark:border-yellow-700' 
-                : isPendingSubmission
-                ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800'
-                : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
-            } bg-white dark:bg-gray-900`}>
-              <input
-                ref={el => {
-                  if (el) {
-                    inputRefs.current[question.uuid] = el;
-                  }
-                }}
-                type="number"
-                value={answers[question.uuid] || ''}
-                onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
-                onKeyDown={(e) => handleKeyDown(question.uuid, e)}
-                className={`[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none w-14 sm:w-16 py-1.5 text-lg sm:text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600 ${
-                  isPendingSubmission ? 'cursor-not-allowed text-gray-500 dark:text-gray-400' : ''
-                }`}
-                placeholder="?"
-                disabled={!testStarted || isPendingSubmission}
-              />
+          <td className="px-3 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-3">
+                  <span className="text-lg font-mono whitespace-nowrap">{parseQuestionText(question.text)[0]}</span>
+                  <span className="text-lg text-blue-600 dark:text-blue-400 font-mono">
+                    {question.question_type === 'multiply' ? '×' : '÷'}
+                  </span>
+                  <span className="text-lg font-mono whitespace-nowrap">{parseQuestionText(question.text)[1]}</span>
+                  <span className="text-lg text-blue-600 dark:text-blue-400 font-mono">=</span>
+                </div>
+                <div className={`inline-block rounded-lg border transition-colors duration-200 ${
+                  submittingQuestionId === question.uuid 
+                    ? 'border-yellow-300 dark:border-yellow-700' 
+                    : isPendingSubmission
+                    ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800'
+                    : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
+                } bg-white dark:bg-gray-900`}>
+                  <input
+                    ref={el => {
+                      if (el) {
+                        inputRefs.current[question.uuid] = el;
+                      }
+                    }}
+                    type="number"
+                    value={answers[question.uuid] || ''}
+                    onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(question.uuid, e)}
+                    className={`[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none w-16 py-2 text-lg text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600 ${
+                      isPendingSubmission ? 'cursor-not-allowed text-gray-500 dark:text-gray-400' : ''
+                    }`}
+                    placeholder="?"
+                    disabled={!testStarted || isPendingSubmission}
+                  />
+                </div>
+              </div>
             </div>
           </td>
         </tr>
+      ));
+    } else {
+      return (
+        <>
+          {Array.from({ length: Math.max(...questions.map(q => parseQuestionText(q.text).length)) }).map((_, rowIndex) => {
+            const bottomUpIndex = Math.max(...questions.map(q => parseQuestionText(q.text).length)) - rowIndex - 1;
+            return (
+              <tr key={rowIndex}>
+                <td className="w-12 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+                  {rowIndex + 1}
+                </td>
+                {questions.map((question) => {
+                  const numbers = parseQuestionText(question.text);
+                  return (
+                    <td
+                      key={question.uuid}
+                      className="w-12 px-1 py-2 text-sm text-gray-900 dark:text-white whitespace-nowrap border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
+                    >
+                      <div className="w-full flex justify-end pr-1 font-mono">
+                        {numbers[bottomUpIndex] !== undefined ? formatNumber(numbers[bottomUpIndex]) : ''}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+          <tr>
+            <td className="w-12 px-1 py-3 text-center text-sm font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+              Answer
+            </td>
+            {questions.map((question) => (
+              <td
+                key={question.uuid}
+                className="w-12 px-1 py-3 text-center border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
+              >
+                <div className={`inline-block rounded-lg border transition-colors duration-200 ${
+                  submittingQuestionId === question.uuid 
+                    ? 'border-yellow-300 dark:border-yellow-700' 
+                    : isPendingSubmission
+                    ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800'
+                    : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
+                } bg-white dark:bg-gray-900`}>
+                  <input
+                    ref={el => {
+                      if (el) {
+                        inputRefs.current[question.uuid] = el;
+                      }
+                    }}
+                    type="number"
+                    value={answers[question.uuid] || ''}
+                    onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(question.uuid, e)}
+                    className={`[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none w-12 px-1 py-1 text-sm text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600 ${
+                      isPendingSubmission ? 'cursor-not-allowed text-gray-500 dark:text-gray-400' : ''
+                    }`}
+                    placeholder="?"
+                    disabled={!testStarted || isPendingSubmission}
+                  />
+                </div>
+              </td>
+            ))}
+          </tr>
+        </>
       );
-    });
+    }
+  };
+
+  const renderDesktopView = (questions: Question[], isMulDiv: boolean) => {
+    if (isMulDiv) {
+      const rowsPerColumn = Math.ceil(questions.length / 2);
+      const firstColumnQuestions = questions.slice(0, rowsPerColumn);
+      const secondColumnQuestions = questions.slice(rowsPerColumn);
+
+      return firstColumnQuestions.map((question1, rowIndex) => {
+        const question2 = secondColumnQuestions[rowIndex];
+        return (
+          <tr key={question1.uuid}>
+            <td className="w-16 px-4 py-3 text-center text-base font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/20 border-b-[3px] border-b-blue-600 border-r-[3px] border-r-blue-600">
+              {question1.order}
+            </td>
+            <td className="px-4 py-3 border-b-[3px] border-b-blue-600 border-r-[3px] border-r-blue-600">
+              <div className="flex items-center space-x-4">
+                <span className="text-xl font-mono">{parseQuestionText(question1.text)[0]}</span>
+                <span className="text-xl text-blue-600 dark:text-blue-400 font-mono">
+                  {question1.question_type === 'multiply' ? '×' : '÷'}
+                </span>
+                <span className="text-xl font-mono">{parseQuestionText(question1.text)[1]}</span>
+                <span className="text-xl text-blue-600 dark:text-blue-400 font-mono">=</span>
+                <div className={`inline-block rounded-lg border transition-colors duration-200 ${
+                  submittingQuestionId === question1.uuid 
+                    ? 'border-yellow-300 dark:border-yellow-700' 
+                    : isPendingSubmission
+                    ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800'
+                    : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
+                } bg-white dark:bg-gray-900`}>
+                  <input
+                    ref={el => {
+                      if (el) {
+                        inputRefs.current[question1.uuid] = el;
+                      }
+                    }}
+                    type="number"
+                    value={answers[question1.uuid] || ''}
+                    onChange={(e) => handleAnswerChange(question1.uuid, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(question1.uuid, e)}
+                    className={`[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none w-20 py-1.5 text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600 ${
+                      isPendingSubmission ? 'cursor-not-allowed text-gray-500 dark:text-gray-400' : ''
+                    }`}
+                    placeholder="?"
+                    disabled={!testStarted || isPendingSubmission}
+                  />
+                </div>
+              </div>
+            </td>
+            {question2 ? (
+              <>
+                <td className="w-16 px-4 py-3 text-center text-base font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/20 border-b-[3px] border-b-blue-600 border-r-[3px] border-r-blue-600">
+                  {question2.order}
+                </td>
+                <td className="px-4 py-3 border-b-[3px] border-b-blue-600">
+                  <div className="flex items-center space-x-4">
+                    <span className="text-xl font-mono">{parseQuestionText(question2.text)[0]}</span>
+                    <span className="text-xl text-blue-600 dark:text-blue-400 font-mono">
+                      {question2.question_type === 'multiply' ? '×' : '÷'}
+                    </span>
+                    <span className="text-xl font-mono">{parseQuestionText(question2.text)[1]}</span>
+                    <span className="text-xl text-blue-600 dark:text-blue-400 font-mono">=</span>
+                    <div className={`inline-block rounded-lg border transition-colors duration-200 ${
+                      submittingQuestionId === question2.uuid 
+                        ? 'border-yellow-300 dark:border-yellow-700' 
+                        : isPendingSubmission
+                        ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800'
+                        : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
+                    } bg-white dark:bg-gray-900`}>
+                      <input
+                        ref={el => {
+                          if (el) {
+                            inputRefs.current[question2.uuid] = el;
+                          }
+                        }}
+                        type="number"
+                        value={answers[question2.uuid] || ''}
+                        onChange={(e) => handleAnswerChange(question2.uuid, e.target.value)}
+                        onKeyDown={(e) => handleKeyDown(question2.uuid, e)}
+                        className={`[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none w-20 py-1.5 text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600 ${
+                          isPendingSubmission ? 'cursor-not-allowed text-gray-500 dark:text-gray-400' : ''
+                        }`}
+                        placeholder="?"
+                        disabled={!testStarted || isPendingSubmission}
+                      />
+                    </div>
+                  </div>
+                </td>
+              </>
+            ) : (
+              <>
+                <td className="w-16 px-4 py-3 bg-indigo-50/50 dark:bg-indigo-900/20 border-b-[3px] border-b-blue-600 border-r-[3px] border-r-blue-600"></td>
+                <td className="px-4 py-3 border-b-[3px] border-b-blue-600"></td>
+              </>
+            )}
+          </tr>
+        );
+      });
+    } else {
+      {
+        return (
+          <>
+            {Array.from({ length: Math.max(...questions.map(q => parseQuestionText(q.text).length)) }).map((_, rowIndex) => {
+              const bottomUpIndex = Math.max(...questions.map(q => parseQuestionText(q.text).length)) - rowIndex - 1;
+              return (
+                <tr key={rowIndex}>
+                  <td className="w-12 px-1 py-2 text-center text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+                    {rowIndex + 1}
+                  </td>
+                  {questions.map((question) => {
+                    const numbers = parseQuestionText(question.text);
+                    return (
+                      <td
+                        key={question.uuid}
+                        className="w-12 px-1 py-2 text-sm text-gray-900 dark:text-white whitespace-nowrap border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
+                      >
+                        <div className="w-full flex justify-end pr-1 font-mono">
+                          {numbers[bottomUpIndex] !== undefined ? formatNumber(numbers[bottomUpIndex]) : ''}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+            <tr>
+              <td className="w-12 px-1 py-3 text-center text-sm font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
+                Answer
+              </td>
+              {questions.map((question) => (
+                <td
+                  key={question.uuid}
+                  className="w-12 px-1 py-3 text-center border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
+                >
+                  <div className={`inline-block rounded-lg border transition-colors duration-200 ${
+                    submittingQuestionId === question.uuid 
+                      ? 'border-yellow-300 dark:border-yellow-700' 
+                      : isPendingSubmission
+                      ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800'
+                      : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
+                  } bg-white dark:bg-gray-900`}>
+                    <input
+                      ref={el => {
+                        if (el) {
+                          inputRefs.current[question.uuid] = el;
+                        }
+                      }}
+                      type="number"
+                      value={answers[question.uuid] || ''}
+                      onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(question.uuid, e)}
+                      className={`[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none w-20 px-1 py-1 text-sm text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600 ${
+                        isPendingSubmission ? 'cursor-not-allowed text-gray-500 dark:text-gray-400' : ''
+                      }`}
+                      placeholder="?"
+                      disabled={!testStarted || isPendingSubmission}
+                    />
+                  </div>
+                </td>
+              ))}
+            </tr>
+          </>
+        );
+      }
+    }
   };
 
   return (
@@ -1134,12 +1366,12 @@ const StudentTestDetails: React.FC = () => {
                     }
                   }
                 }}>
-                  <Tab.List className="flex justify-start rounded-xl bg-indigo-100/20 dark:bg-indigo-900/20 p-1 mb-6 space-x-2">
+                  <Tab.List className={`${isMobile ? 'grid grid-cols-2 gap-2' : 'flex justify-start space-x-2'} rounded-xl bg-indigo-100/20 dark:bg-indigo-900/20 p-1 mb-6`}>
                     {test.sections.map((section, index) => (
                       <Tab
                         key={section.uuid}
                         className={({ selected }) =>
-                          `px-6 rounded-lg py-2.5 text-sm font-medium leading-5 min-w-[200px]
+                          `px-4 rounded-lg py-2.5 text-sm font-medium leading-5 ${isMobile ? 'w-full' : 'min-w-[200px]'}
                           ${selected
                             ? 'bg-white dark:bg-gray-800 shadow text-indigo-600 dark:text-indigo-400'
                             : 'text-gray-600 dark:text-gray-400 hover:bg-white/[0.12] hover:text-indigo-600 dark:hover:text-indigo-400'
@@ -1150,113 +1382,62 @@ const StudentTestDetails: React.FC = () => {
                       </Tab>
                     ))}
                   </Tab.List>
-                  <Tab.Panels>
+                  <Tab.Panels className={isMobile ? 'max-w-[300px] mx-auto' : ''}>
                     {test.sections.map((section, sectionIndex) => {
                       const { currentQuestions, pagination } = renderPagination(section.questions, section.uuid);
                       const isMulDiv = section.section_type === "MUL_DIV";
                       
                       return (
                         <Tab.Panel key={section.uuid}>
-                          <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-indigo-100 dark:border-indigo-800">
-                            <table className="w-full border-collapse">
+                          <div className={`overflow-x-auto bg-white dark:bg-gray-800 rounded-2xl shadow-lg`}>
+                            <table className="w-full border-collapse border-[3px] border-blue-600 dark:border-blue-600">
                               <thead>
-                                <tr className="border-b border-indigo-100 dark:border-indigo-800">
-                                  <th className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-left text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
-                                    No.
-                                  </th>
+                                <tr>
                                   {isMulDiv ? (
-                                    <>
-                                      <th className="w-20 sm:w-24 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
-                                        First Number
-                                      </th>
-                                      <th className="w-12 sm:w-16 px-2 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
-                                        Operation
-                                      </th>
-                                      <th className="w-16 sm:w-20 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900">
-                                        Second Number
-                                      </th>
-                                      <th className="w-24 sm:w-28 px-2 sm:px-3 py-2.5 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-900/20">
-                                        Answer
-                                      </th>
-                                    </>
+                                    isMobile ? (
+                                      <>
+                                        <th className="w-8 px-1 py-2 text-left text-xs font-semibold text-blue-600 dark:text-blue-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-b border-b-blue-300">
+                                          No.
+                                        </th>
+                                        <th className="px-2 py-2 text-left text-xs font-semibold text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 border-b border-b-blue-300">
+                                          Question
+                                        </th>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <th className="w-16 px-4 py-3 text-left text-sm font-semibold text-blue-600 dark:text-blue-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-b-[3px] border-b-blue-600 border-r-[3px] border-r-blue-600">
+                                          No.
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 border-b-[3px] border-b-blue-600 border-r-[3px] border-r-blue-600">
+                                          Question
+                                        </th>
+                                        <th className="w-16 px-4 py-3 text-left text-sm font-semibold text-blue-600 dark:text-blue-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-b-[3px] border-b-blue-600 border-r-[3px] border-r-blue-600">
+                                          No.
+                                        </th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-blue-600 dark:text-blue-400 bg-white dark:bg-gray-800 border-b-[3px] border-b-blue-600">
+                                          Question
+                                        </th>
+                                      </>
+                                    )
                                   ) : (
-                                    currentQuestions.map((question) => (
-                                      <th
-                                        key={question.uuid}
-                                        className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-sm sm:text-base font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-900/30 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
-                                      >
-                                        Q{question.order}
+                                    <>
+                                      <th className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-sm sm:text-base font-bold text-blue-600 dark:text-blue-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-blue-600">
+                                       No.
                                       </th>
-                                    ))
+                                      {currentQuestions.map((question) => (
+                                        <th
+                                          key={question.uuid}
+                                          className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-sm sm:text-base font-bold text-blue-600 dark:text-blue-400 bg-indigo-50/50 dark:bg-indigo-900/20 border-r-[3px] border-r-blue-600"
+                                        >
+                                          Q{question.order}
+                                        </th>
+                                      ))}
+                                    </>
                                   )}
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-indigo-100/50 dark:divide-indigo-800/50">
-                                {isMulDiv ? (
-                                  renderMulDivQuestions(currentQuestions)
-                                ) : (
-                                  <>
-                                    {Array.from({ length: Math.max(...currentQuestions.map(q => parseQuestionText(q.text).length)) }).map((_, rowIndex) => {
-                                      const bottomUpIndex = Math.max(...currentQuestions.map(q => parseQuestionText(q.text).length)) - rowIndex - 1;
-                                      return (
-                                        <tr key={rowIndex}>
-                                          <td className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-center text-base sm:text-lg font-medium text-gray-900 dark:text-white whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
-                                            {rowIndex + 1}
-                                          </td>
-                                          {currentQuestions.map((question) => {
-                                            const numbers = parseQuestionText(question.text);
-                                            return (
-                                              <td
-                                                key={question.uuid}
-                                                className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-3 text-base sm:text-lg text-gray-900 dark:text-white whitespace-nowrap border-t border-t-indigo-100 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
-                                              >
-                                                <div className="w-full flex justify-end pr-2 font-mono">
-                                                  {numbers[bottomUpIndex] !== undefined ? formatNumber(numbers[bottomUpIndex]) : ''}
-                                                </div>
-                                              </td>
-                                            );
-                                          })}
-                                        </tr>
-                                      );
-                                    })}
-                                    <tr>
-                                      <td className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center text-base sm:text-lg font-bold text-indigo-700 dark:text-indigo-300 whitespace-nowrap bg-indigo-50/50 dark:bg-indigo-900/10 border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900 sticky left-0">
-                                        Answer
-                                      </td>
-                                      {currentQuestions.map((question) => (
-                                        <td
-                                          key={question.uuid}
-                                          className="w-16 sm:w-20 md:w-24 px-2 sm:px-3 py-4 text-center border-t-2 border-t-indigo-200 dark:border-t-indigo-800 border-r-[3px] border-r-indigo-900 dark:border-r-indigo-900"
-                                        >
-                                          <div className={`inline-block rounded-lg border transition-colors duration-200 ${
-                                            submittingQuestionId === question.uuid 
-                                              ? 'border-yellow-300 dark:border-yellow-700' 
-                                              : isPendingSubmission
-                                              ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800'
-                                              : 'border-indigo-100 dark:border-indigo-800 focus-within:border-indigo-600 dark:focus-within:border-indigo-500'
-                                          } bg-white dark:bg-gray-900`}>
-                                            <input
-                                              ref={el => {
-                                                if (el) {
-                                                  inputRefs.current[question.uuid] = el;
-                                                }
-                                              }}
-                                              type="number"
-                                              value={answers[question.uuid] || ''}
-                                              onChange={(e) => handleAnswerChange(question.uuid, e.target.value)}
-                                              onKeyDown={(e) => handleKeyDown(question.uuid, e)}
-                                              className={`[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none w-16 sm:w-20 px-2 py-2 text-base sm:text-lg md:text-xl text-center font-mono bg-transparent focus:outline-none dark:text-white placeholder-indigo-300 dark:placeholder-indigo-600 ${
-                                                isPendingSubmission ? 'cursor-not-allowed text-gray-500 dark:text-gray-400' : ''
-                                              }`}
-                                              placeholder="?"
-                                              disabled={!testStarted || isPendingSubmission}
-                                            />
-                                          </div>
-                                        </td>
-                                      ))}
-                                    </tr>
-                                  </>
-                                )}
+                                {isMobile ? renderMobileView(currentQuestions, isMulDiv) : renderDesktopView(currentQuestions, isMulDiv)}
                               </tbody>
                             </table>
                           </div>
