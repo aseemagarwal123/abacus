@@ -14,7 +14,8 @@ import {
   Bell,
   ChevronDown,
   ChevronUp,
-  MessageCircle
+  MessageCircle,
+  ChevronLeft
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useTests } from '../../hooks/useTests';
@@ -35,6 +36,23 @@ const StudentDashboard: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
+  const [currentNotificationIndex, setCurrentNotificationIndex] = useState(0);
+
+  const gradients = [
+    'from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30',
+    'from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/30',
+    'from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/30',
+    'from-rose-50 to-rose-100 dark:from-rose-900/20 dark:to-rose-800/30',
+    'from-amber-50 to-amber-100 dark:from-amber-900/20 dark:to-amber-800/30',
+  ];
+
+  const buttonColors = [
+    'text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300',
+    'text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300',
+    'text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300',
+    'text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300',
+    'text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300',
+  ];
 
   if (!userData) return null;
 
@@ -91,6 +109,18 @@ const StudentDashboard: React.FC = () => {
       prev.includes(uuid) 
         ? prev.filter(id => id !== uuid)
         : [...prev, uuid]
+    );
+  };
+
+  const nextNotification = () => {
+    setCurrentNotificationIndex((prev) => 
+      prev === notifications.length - 1 ? 0 : prev + 1
+    );
+  };
+
+  const prevNotification = () => {
+    setCurrentNotificationIndex((prev) => 
+      prev === 0 ? notifications.length - 1 : prev - 1
     );
   };
 
@@ -151,76 +181,88 @@ const StudentDashboard: React.FC = () => {
       </div>
 
       {/* Notifications Section */}
-      <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg">
-              <Bell className="w-6 h-6 text-primary-600 dark:text-primary-400" />
-            </div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Recent Messages</h2>
-          </div>
-          {notifications.length > 0 && (
-            <div className="px-3 py-1 bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 text-sm rounded-full">
-              {notifications.length} Messages
-            </div>
-          )}
-        </div>
-        <div className="h-[120px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
+      <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="relative">
           {isLoadingNotifications ? (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center h-[150px]">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
             </div>
           ) : notifications.length === 0 ? (
-            <div className="text-center h-full flex flex-col items-center justify-center">
+            <div className="h-[150px] text-center flex flex-col items-center justify-center">
               <MessageCircle className="w-12 h-12 text-gray-400 mb-3" />
               <p className="text-gray-500 dark:text-gray-400">No messages yet</p>
             </div>
           ) : (
-            <div className="space-y-4 px-1">
-              {notifications.map((notification) => {
-                const isExpanded = expandedIds.includes(notification.uuid);
-                return (
-                  <div
-                    key={notification.uuid}
-                    className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors duration-200 min-h-[100px]"
-                    onClick={() => toggleExpand(notification.uuid)}
+            <div className="relative h-[150px] group">
+              {/* Navigation Arrows */}
+              {notifications.length > 1 && (
+                <>
+                  <button
+                    onClick={prevNotification}
+                    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 p-2 rounded-full bg-white/90 dark:bg-gray-800/90 shadow-lg hover:bg-white dark:hover:bg-gray-700 transition-all duration-200 z-10 opacity-0 group-hover:opacity-100 group-hover:translate-x-0"
                   >
-                    <div className="flex items-start space-x-3">
-                      <div className="flex-shrink-0">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
-                          <MessageCircle className="w-4 h-4 text-blue-500" />
+                    <ChevronLeft className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+                  </button>
+                  <button
+                    onClick={nextNotification}
+                    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 p-2 rounded-full bg-white/90 dark:bg-gray-800/90 shadow-lg hover:bg-white dark:hover:bg-gray-700 transition-all duration-200 z-10 opacity-0 group-hover:opacity-100 group-hover:translate-x-0"
+                  >
+                    <ChevronRight className="w-6 h-6 text-gray-600 dark:text-gray-300" />
+                  </button>
+                </>
+              )}
+              
+              {/* Notifications */}
+              <div className="h-full">
+                {notifications.map((notification, index) => {
+                  const isExpanded = expandedIds.includes(notification.uuid);
+                  const isActive = index === currentNotificationIndex;
+                  const gradientColor = gradients[index % gradients.length];
+                  const buttonColor = buttonColors[index % buttonColors.length];
+                  return (
+                    <div
+                      key={notification.uuid}
+                      className={`absolute inset-0 transition-all duration-500 ${
+                        isActive 
+                          ? 'opacity-100 transform translate-x-0' 
+                          : 'opacity-0 transform translate-x-full pointer-events-none'
+                      }`}
+                    >
+                      <div className={`h-full flex flex-col bg-gradient-to-br ${gradientColor} rounded-lg p-6`}>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-2">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                              {notification.title}
+                            </h3>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {formatDate(notification.created_at)}
+                            </span>
+                          </div>
+                          <p className={`text-sm text-gray-600 dark:text-gray-300 leading-relaxed ${!isExpanded ? 'line-clamp-2' : ''}`}>
+                            {notification.message}
+                          </p>
                         </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between">
-                          <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1">
-                            {notification.title}
-                          </h3>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 whitespace-nowrap">
-                            {formatDate(notification.created_at)}
-                          </span>
-                        </div>
-                        <p className={`text-sm text-gray-600 dark:text-gray-300 ${!isExpanded ? 'line-clamp-2' : ''}`}>
-                          {notification.message}
-                        </p>
-                        <button className="mt-2 flex items-center text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors duration-200">
+                        <button
+                          onClick={() => toggleExpand(notification.uuid)}
+                          className={`mt-2 inline-flex items-center ${buttonColor} transition-colors duration-200`}
+                        >
                           {isExpanded ? (
                             <>
                               <ChevronUp className="w-4 h-4 mr-1" />
-                              <span className="text-sm">Show Less</span>
+                              <span className="text-xs font-medium">Show Less</span>
                             </>
                           ) : (
                             <>
                               <ChevronDown className="w-4 h-4 mr-1" />
-                              <span className="text-sm">Read More</span>
+                              <span className="text-xs font-medium">Read More</span>
                             </>
                           )}
                         </button>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
