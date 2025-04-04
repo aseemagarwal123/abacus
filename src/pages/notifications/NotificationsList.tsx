@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Plus, AlertCircle, Clock, Search } from 'lucide-react';
+import { Bell, Plus, AlertCircle, Clock, Search, Trash2 } from 'lucide-react';
 import { getApiUrl } from '../../config/api';
 import PostNotificationModal from '../../components/notifications/PostNotificationModal';
 
@@ -16,6 +16,7 @@ const NotificationsList: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   const fetchNotifications = async () => {
     try {
@@ -34,6 +35,30 @@ const NotificationsList: React.FC = () => {
       setError('Failed to load notifications');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const deleteNotification = async (uuid: string) => {
+    try {
+      setIsDeleting(uuid);
+      const response = await fetch(getApiUrl(`notifications/${uuid}/`), {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Token ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete notification');
+      }
+
+      // Remove the notification from the local state
+      setNotifications(prev => prev.filter(n => n.uuid !== uuid));
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      setError('Failed to delete notification');
+    } finally {
+      setIsDeleting(null);
     }
   };
 
@@ -108,7 +133,7 @@ const NotificationsList: React.FC = () => {
           <div className="flex items-center">
             <AlertCircle className="w-5 h-5 text-red-400 mr-3" />
             <div>
-              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Error loading notifications</h3>
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Error</h3>
               <p className="mt-1 text-sm text-red-700 dark:text-red-300">{error}</p>
             </div>
           </div>
@@ -159,9 +184,22 @@ const NotificationsList: React.FC = () => {
                     <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 sm:line-clamp-none mb-2">
                       {notification.message}
                     </p>
-                    <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
-                      <Clock className="w-3.5 h-3.5 mr-1" />
-                      {formatDate(notification.created_at)}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
+                        <Clock className="w-3.5 h-3.5 mr-1" />
+                        {formatDate(notification.created_at)}
+                      </div>
+                      <button
+                        onClick={() => deleteNotification(notification.uuid)}
+                        disabled={isDeleting === notification.uuid}
+                        className="inline-flex items-center px-2 py-1 text-sm text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors duration-200"
+                      >
+                        {isDeleting === notification.uuid ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border border-b-2 border-red-600"></div>
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>
