@@ -1,3 +1,82 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@keyframes scroll {
+  0%, 5% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  10% {
+    transform: translateX(80%);
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+
+.notification-container {
+  position: relative;
+  overflow: hidden;
+  height: 60px;
+  display: flex;
+  align-items: center;
+}
+
+.notification-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.animate-scroll {
+  position: absolute;
+  animation: scroll 9s linear infinite;
+  white-space: nowrap;
+  will-change: transform, opacity;
+}
+
+.animate-scroll:hover {
+  animation-play-state: paused;
+}
+
+/* Fade edges */
+.notification-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    #ffffff 0%,
+    transparent 5%,
+    transparent 95%,
+    #ffffff 100%
+  );
+  z-index: 1;
+}
+
+.dark .notification-container::after {
+  background: linear-gradient(
+    to right,
+    rgb(31 41 55) 0%,
+    transparent 5%,
+    transparent 95%,
+    rgb(31 41 55) 100%
+  );
+}
+
+/* Add a gradient fade effect on the sides */
+.notification-container::before,
+.notification-container::after {
+  display: none;
+}
+
+/* Dark mode support is handled automatically by mask-image */

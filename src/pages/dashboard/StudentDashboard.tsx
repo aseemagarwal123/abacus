@@ -182,7 +182,7 @@ const StudentDashboard: React.FC = () => {
 
       {/* Notifications Section */}
       <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
-        <div className="relative">
+        <div className="notification-container">
           {isLoadingNotifications ? (
             <div className="flex items-center justify-center h-[150px]">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -193,75 +193,17 @@ const StudentDashboard: React.FC = () => {
               <p className="text-gray-500 dark:text-gray-400">No messages yet</p>
             </div>
           ) : (
-            <div className="relative h-[150px] group">
-              {/* Navigation Arrows */}
-              {notifications.length > 1 && (
-                <>
-                  <button
-                    onClick={prevNotification}
-                    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 p-2 rounded-full bg-white/90 dark:bg-gray-800/90 shadow-lg hover:bg-white dark:hover:bg-gray-700 transition-all duration-200 z-10 opacity-0 group-hover:opacity-100 group-hover:translate-x-0"
-                  >
-                    <ChevronLeft className="w-6 h-6 text-gray-600 dark:text-gray-300" />
-                  </button>
-                  <button
-                    onClick={nextNotification}
-                    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 p-2 rounded-full bg-white/90 dark:bg-gray-800/90 shadow-lg hover:bg-white dark:hover:bg-gray-700 transition-all duration-200 z-10 opacity-0 group-hover:opacity-100 group-hover:translate-x-0"
-                  >
-                    <ChevronRight className="w-6 h-6 text-gray-600 dark:text-gray-300" />
-                  </button>
-                </>
-              )}
-              
-              {/* Notifications */}
-              <div className="h-full">
-                {notifications.map((notification, index) => {
-                  const isExpanded = expandedIds.includes(notification.uuid);
-                  const isActive = index === currentNotificationIndex;
-                  const gradientColor = gradients[index % gradients.length];
-                  const buttonColor = buttonColors[index % buttonColors.length];
-                  return (
-                    <div
-                      key={notification.uuid}
-                      className={`absolute inset-0 transition-all duration-500 ${
-                        isActive 
-                          ? 'opacity-100 transform translate-x-0' 
-                          : 'opacity-0 transform translate-x-full pointer-events-none'
-                      }`}
-                    >
-                      <div className={`h-full flex flex-col bg-gradient-to-br ${gradientColor} rounded-lg p-6`}>
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between mb-2">
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                              {notification.title}
-                            </h3>
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
-                              {formatDate(notification.created_at)}
-                            </span>
-                          </div>
-                          <p className={`text-sm text-gray-600 dark:text-gray-300 leading-relaxed ${!isExpanded ? 'line-clamp-2' : ''}`}>
-                            {notification.message}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => toggleExpand(notification.uuid)}
-                          className={`mt-2 inline-flex items-center ${buttonColor} transition-colors duration-200`}
-                        >
-                          {isExpanded ? (
-                            <>
-                              <ChevronUp className="w-4 h-4 mr-1" />
-                              <span className="text-xs font-medium">Show Less</span>
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="w-4 h-4 mr-1" />
-                              <span className="text-xs font-medium">Read More</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+            <div className="notification-wrapper">
+              <div
+                key={`notification-${notifications[0].uuid}`}
+                className="animate-scroll"
+              >
+                <div className={`px-6 py-3 rounded-lg bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/30`}>
+                  <span className="text-lg">
+                    <span className="font-bold text-blue-900 dark:text-blue-100">{notifications[0].title}:</span>
+                    <span className="ml-2 text-blue-800 dark:text-blue-200">{notifications[0].message}</span>
+                  </span>
+                </div>
               </div>
             </div>
           )}
